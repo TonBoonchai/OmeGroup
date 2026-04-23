@@ -1,0 +1,10 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  background-color: #111827; /* Dark mode by default */
+  color: white;
+  margin: 0;
+  overflow: hidden; /* Prevent scrolling when video feeds resize */
+}
