@@ -3,12 +3,17 @@ Random Group Video Chat Platform
 
 
 # draft
+
+
+
 ## backend
-not tested
+must deploy terraform first
+then use url from finish terrform to inject to backend
+then compile then upload to lambda
 ```
 cargo install cargo-lambda
-cargo lambda build --release --bin authorizer --arm64
-cargo lambda deploy class-demo-env-backend
+cargo lambda build --release --compiler cargo-zigbuild
+cargo lambda deploy omegroup-backend
 ```
 ## frontend
 ```
