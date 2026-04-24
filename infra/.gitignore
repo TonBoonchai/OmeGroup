@@ -1,0 +1,19 @@
+# Local .terraform directory (contains provider binaries and modules)
+.terraform/
+
+# Terraform state files (Contains sensitive data and infrastructure secrets)
+*.tfstate
+*.tfstate.backup
+*.tfstate.lock.info
+
+
+# Override files
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+
+# Ignore CLI configuration files
+.terraformrc
+terraform.rc

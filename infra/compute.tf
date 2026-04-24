@@ -2,7 +2,11 @@
 data "aws_iam_policy_document" "lambda_assume" {
   statement {
     actions = ["sts:AssumeRole"]
-    principals { type = "Service", identifiers = ["lambda.amazonaws.com"] }
+    
+    principals {
+      type        = "Service"
+      identifiers = ["lambda.amazonaws.com"]
+    }
   }
 }
 
@@ -59,10 +63,11 @@ resource "aws_lambda_function" "chat_backend" {
     security_group_ids = [aws_security_group.redis_sg.id]
   }
 
-  environment {
+environment {
     variables = {
       REDIS_URL = "redis://${aws_elasticache_cluster.redis.cache_nodes[0].address}:6379"
-      WSS_URL   = aws_apigatewayv2_stage.prod_stage.invoke_url
+      # Break the cycle by constructing the URL manually
+      WSS_URL   = "wss://${aws_apigatewayv2_api.websocket_api.id}.execute-api.${var.aws_region}.amazonaws.com/production"
     }
   }
 }
@@ -181,7 +186,8 @@ resource "aws_lambda_function" "chat_cron" {
   environment {
     variables = {
       REDIS_URL = "redis://${aws_elasticache_cluster.redis.cache_nodes[0].address}:6379"
-      WSS_URL   = aws_apigatewayv2_stage.prod_stage.invoke_url
+      # Break the cycle by constructing the URL manually
+      WSS_URL   = "wss://${aws_apigatewayv2_api.websocket_api.id}.execute-api.${var.aws_region}.amazonaws.com/production"
     }
   }
 }

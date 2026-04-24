@@ -1,5 +1,5 @@
-use aws_sdk_apigatewaymanagementapi::Client as ApiGwClient;
-use aws_sdk_apigatewaymanagementapi::primitives::Blob;
+use aws_sdk_apigatewaymanagement::Client as ApiGwClient;
+use aws_sdk_apigatewaymanagement::primitives::Blob;
 use aws_sdk_ivsrealtime::Client as IvsClient;
 use lambda_http::{Body, Error, Request};
 use redis::AsyncCommands;

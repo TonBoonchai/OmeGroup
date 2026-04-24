@@ -1,5 +1,5 @@
-use aws_sdk_apigatewaymanagementapi::Client as ApiGwClient;
-use aws_sdk_apigatewaymanagementapi::primitives::Blob;
+use aws_sdk_apigatewaymanagement::Client as ApiGwClient;
+use aws_sdk_apigatewaymanagement::primitives::Blob;
 use aws_sdk_ivsrealtime::Client as IvsClient;
 use lambda_runtime::{run, service_fn, Error, LambdaEvent};
 use redis::AsyncCommands;
@@ -33,7 +33,7 @@ async fn cron_handler(
                 room.clone()
             } else {
                 let stage = ivs_client.create_stage().name("dynamic-room").send().await?;
-                let new_arn = stage.stage().unwrap().arn().unwrap().to_string();
+                let new_arn = stage.stage().unwrap().arn().to_string();
                 let _: () = con.zadd("active_rooms", &new_arn, 1).await?;
                 new_arn
             };
@@ -83,7 +83,7 @@ async fn main() -> Result<(), Error> {
     let ivs_client = IvsClient::new(&shared_config);
     
     let endpoint_url = std::env::var("WSS_URL").expect("WSS_URL missing").replace("wss://", "https://");
-    let apigw_config = aws_sdk_apigatewaymanagementapi::config::Builder::from(&shared_config)
+    let apigw_config = aws_sdk_apigatewaymanagement::config::Builder::from(&shared_config)
         .endpoint_url(endpoint_url)
         .build();
     let apigw_client = ApiGwClient::from_conf(apigw_config);

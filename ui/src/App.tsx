@@ -10,7 +10,12 @@ import { RefreshCw, LogOut, Send, User as UserIcon } from 'lucide-react';
 
 // Configure Amplify
 Amplify.configure({
-    Auth: { Cognito: { userPoolId: '...', userPoolClientId: '...' } }
+    Auth: { 
+        Cognito: { 
+            userPoolId: import.meta.env.VITE_COGNITO_USER_POOL_ID, 
+            userPoolClientId: import.meta.env.VITE_COGNITO_CLIENT_ID 
+        } 
+    }
 });
 
 function App() {
