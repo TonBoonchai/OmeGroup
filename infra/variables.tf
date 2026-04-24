@@ -21,12 +21,22 @@ variable "public_subnet_cidr" {
 }
 
 variable "private_subnet_cidr" {
-  description = "The CIDR block for the private subnet housing Redis"
+  description = "The CIDR block for the primary private subnet housing Redis"
+  type        = string
+}
+
+variable "private_subnet_2_cidr" {
+  description = "The CIDR block for the secondary private subnet (Required by ElastiCache)"
   type        = string
 }
 
 variable "availability_zone" {
-  description = "The specific AZ to pin the subnets to"
+  description = "The primary AZ to pin the subnets to"
+  type        = string
+}
+
+variable "availability_zone_2" {
+  description = "The secondary AZ for ElastiCache high availability"
   type        = string
 }
 

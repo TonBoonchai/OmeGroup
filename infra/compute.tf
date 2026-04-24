@@ -1,4 +1,4 @@
-# 1. IAM Permissions (from earlier)
+# 1. IAM Permissions
 data "aws_iam_policy_document" "lambda_assume" {
   statement {
     actions = ["sts:AssumeRole"]
@@ -17,15 +17,25 @@ resource "aws_iam_role_policy_attachment" "lambda_vpc" {
 }
 
 data "aws_iam_policy_document" "chat_app_policy" {
+  # IVS Permissions
   statement {
-    effect = "Allow"
-    actions = ["ivs:CreateStage", "ivs:CreateParticipantToken", "ivs:DeleteStage"]
+    effect    = "Allow"
+    actions   = ["ivs:CreateStage", "ivs:CreateParticipantToken", "ivs:DeleteStage"]
     resources = ["*"]
   }
+  
+  # API Gateway Push Permissions (Allows Rust to push chat to clients)
   statement {
-    effect = "Allow"
-    actions = ["execute-api:ManageConnections"]
+    effect    = "Allow"
+    actions   = ["execute-api:ManageConnections"]
     resources = ["arn:aws:execute-api:${var.aws_region}:*:*/*/@connections/*"]
+  }
+
+  # DynamoDB Permissions
+  statement {
+    effect    = "Allow"
+    actions   = ["dynamodb:PutItem", "dynamodb:GetItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem"]
+    resources = [aws_dynamodb_table.users.arn]
   }
 }
 
@@ -35,29 +45,29 @@ resource "aws_iam_role_policy" "chat_app_permissions" {
   policy = data.aws_iam_policy_document.chat_app_policy.json
 }
 
-# 2. The Dummy Lambda Function
+# 2. Main Backend Lambda
 resource "aws_lambda_function" "chat_backend" {
   function_name = "${var.environment_name}-backend"
   filename      = "dummy_payload.zip"
   handler       = "main.handler"
-  runtime       = "provided.al2023" # Rust compiles to a custom binary on Amazon Linux 2023
+  runtime       = "provided.al2023"
   role          = aws_iam_role.chat_lambda_role.arn
   timeout       = 15
 
-  # Attach Lambda to the Private Subnet so it can talk to Redis
   vpc_config {
-    subnet_ids         = [aws_subnet.private.id]
+    subnet_ids         = [aws_subnet.private.id, aws_subnet.private_2.id]
     security_group_ids = [aws_security_group.redis_sg.id]
   }
 
   environment {
     variables = {
       REDIS_URL = "redis://${aws_elasticache_cluster.redis.cache_nodes[0].address}:6379"
+      WSS_URL   = aws_apigatewayv2_stage.prod_stage.invoke_url
     }
   }
 }
 
-# 3. API Gateway & Integrations
+# 3. API Gateway Definition
 resource "aws_apigatewayv2_api" "websocket_api" {
   name                       = "${var.environment_name}-chat-websocket"
   protocol_type              = "WEBSOCKET"
@@ -70,7 +80,6 @@ resource "aws_apigatewayv2_integration" "lambda_integration" {
   integration_uri  = aws_lambda_function.chat_backend.invoke_arn
 }
 
-# Grant API Gateway permission to trigger your Lambda
 resource "aws_lambda_permission" "apigw_lambda" {
   statement_id  = "AllowExecutionFromAPIGateway"
   action        = "lambda:InvokeFunction"
@@ -79,45 +88,9 @@ resource "aws_lambda_permission" "apigw_lambda" {
   source_arn    = "${aws_apigatewayv2_api.websocket_api.execution_arn}/*/*"
 }
 
-# 4. The Exact Routes ($connect, $disconnect, and swipe)
-resource "aws_apigatewayv2_route" "connect_route" {
-  api_id    = aws_apigatewayv2_api.websocket_api.id
-  route_key = "$connect"
-  target    = "integrations/${aws_apigatewayv2_integration.lambda_integration.id}"
-}
-
-resource "aws_apigatewayv2_route" "disconnect_route" {
-  api_id    = aws_apigatewayv2_api.websocket_api.id
-  route_key = "$disconnect"
-  target    = "integrations/${aws_apigatewayv2_integration.lambda_integration.id}"
-}
-
-resource "aws_apigatewayv2_route" "swipe_route" {
-  api_id    = aws_apigatewayv2_api.websocket_api.id
-  route_key = "swipe"
-  target    = "integrations/${aws_apigatewayv2_integration.lambda_integration.id}"
-}
-
-# 5. Deployment Stage
-resource "aws_apigatewayv2_stage" "prod_stage" {
-  api_id      = aws_apigatewayv2_api.websocket_api.id
-  name        = "production"
-  auto_deploy = true
-  depends_on = [
-    aws_apigatewayv2_route.connect_route,
-    aws_apigatewayv2_route.disconnect_route,
-    aws_apigatewayv2_route.swipe_route
-  ]
-}
-
-output "websocket_connection_url" {
-  value = aws_apigatewayv2_stage.prod_stage.invoke_url
-}
-
-# 1. The Authorizer Lambda Function
+# 4. Authorizer Lambda
 resource "aws_lambda_function" "chat_authorizer" {
   function_name = "${var.environment_name}-authorizer"
-  # You will deploy the compiled authorizer binary here just like the backend
   filename      = "dummy_payload.zip" 
   handler       = "main.handler"
   runtime       = "provided.al2023"
@@ -132,7 +105,6 @@ resource "aws_lambda_function" "chat_authorizer" {
   }
 }
 
-# 2. Grant API Gateway permission to trigger the Authorizer
 resource "aws_lambda_permission" "apigw_authorizer" {
   statement_id  = "AllowAuthorizerExecutionFromAPIGateway"
   action        = "lambda:InvokeFunction"
@@ -140,50 +112,80 @@ resource "aws_lambda_permission" "apigw_authorizer" {
   principal     = "apigateway.amazonaws.com"
 }
 
-# 3. Create the API Gateway Authorizer Entity
 resource "aws_apigatewayv2_authorizer" "cognito_authorizer" {
   api_id           = aws_apigatewayv2_api.websocket_api.id
   authorizer_type  = "REQUEST"
   authorizer_uri   = aws_lambda_function.chat_authorizer.invoke_arn
-  identity_sources = ["route.request.querystring.token"] # API Gateway explicitly looks here
+  identity_sources = ["route.request.querystring.token"]
   name             = "cognito-jwt-authorizer"
 }
 
-# 4. CRITICAL: Update the $connect route to USE the Authorizer
-# Modify your existing connect_route block to match this:
+# 5. API Gateway Routes
 resource "aws_apigatewayv2_route" "connect_route" {
   api_id             = aws_apigatewayv2_api.websocket_api.id
   route_key          = "$connect"
   target             = "integrations/${aws_apigatewayv2_integration.lambda_integration.id}"
-  
-  # Attach the security checkpoint
   authorization_type = "CUSTOM"
   authorizer_id      = aws_apigatewayv2_authorizer.cognito_authorizer.id
 }
 
-# The Matchmaker Cron Lambda
+resource "aws_apigatewayv2_route" "disconnect_route" {
+  api_id    = aws_apigatewayv2_api.websocket_api.id
+  route_key = "$disconnect"
+  target    = "integrations/${aws_apigatewayv2_integration.lambda_integration.id}"
+}
+
+resource "aws_apigatewayv2_route" "swipe_route" {
+  api_id    = aws_apigatewayv2_api.websocket_api.id
+  route_key = "swipe"
+  target    = "integrations/${aws_apigatewayv2_integration.lambda_integration.id}"
+}
+
+resource "aws_apigatewayv2_route" "send_message_route" {
+  api_id    = aws_apigatewayv2_api.websocket_api.id
+  route_key = "send_message"
+  target    = "integrations/${aws_apigatewayv2_integration.lambda_integration.id}"
+}
+
+# 6. Deployment Stage
+resource "aws_apigatewayv2_stage" "prod_stage" {
+  api_id      = aws_apigatewayv2_api.websocket_api.id
+  name        = "production"
+  auto_deploy = true
+  depends_on = [
+    aws_apigatewayv2_route.connect_route,
+    aws_apigatewayv2_route.disconnect_route,
+    aws_apigatewayv2_route.swipe_route,
+    aws_apigatewayv2_route.send_message_route
+  ]
+}
+
+output "websocket_connection_url" {
+  value = aws_apigatewayv2_stage.prod_stage.invoke_url
+}
+
+# 7. Matchmaker Cron Setup
 resource "aws_lambda_function" "chat_cron" {
   function_name = "${var.environment_name}-cron"
   filename      = "dummy_payload.zip" 
   handler       = "main.handler"
   runtime       = "provided.al2023"
   role          = aws_iam_role.chat_lambda_role.arn
-  timeout       = 65 # Must live longer than 1 minute to finish the 12 loops
+  timeout       = 65 
   
   vpc_config {
-    subnet_ids         = [aws_subnet.private.id]
+    subnet_ids         = [aws_subnet.private.id, aws_subnet.private_2.id]
     security_group_ids = [aws_security_group.redis_sg.id]
   }
 
   environment {
     variables = {
       REDIS_URL = "redis://${aws_elasticache_cluster.redis.cache_nodes[0].address}:6379"
-      WSS_URL   = aws_apigatewayv2_stage.prod_stage.invoke_url # Needs this to push tokens
+      WSS_URL   = aws_apigatewayv2_stage.prod_stage.invoke_url
     }
   }
 }
 
-# The EventBridge Trigger (Runs exactly once per minute)
 resource "aws_cloudwatch_event_rule" "every_minute" {
   name                = "${var.environment_name}-minute-tick"
   schedule_expression = "rate(1 minute)"

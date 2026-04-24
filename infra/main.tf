@@ -21,16 +21,22 @@ resource "aws_subnet" "private" {
   vpc_id            = aws_vpc.main.id
   cidr_block        = var.private_subnet_cidr
   availability_zone = var.availability_zone
-  tags = { Name = "${var.environment_name}-private-subnet" }
+  tags = { Name = "${var.environment_name}-private-subnet-1" }
 }
 
-# 4. Internet Gateway (Connects VPC to the outside world)
+# NEW: Required secondary subnet for ElastiCache
+resource "aws_subnet" "private_2" {
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = var.private_subnet_2_cidr
+  availability_zone = var.availability_zone_2
+  tags = { Name = "${var.environment_name}-private-subnet-2" }
+}
+
 resource "aws_internet_gateway" "igw" {
   vpc_id = aws_vpc.main.id
   tags = { Name = "chat-igw" }
 }
 
-# 5. Elastic IP & NAT Gateway (Allows Private Subnet to reach IVS APIs)
 resource "aws_eip" "nat_eip" {
   domain = "vpc"
 }
@@ -42,7 +48,6 @@ resource "aws_nat_gateway" "nat" {
   tags = { Name = "chat-nat" }
 }
 
-# 6. Route Tables (Directing the traffic)
 resource "aws_route_table" "public_rt" {
   vpc_id = aws_vpc.main.id
   route {
@@ -64,12 +69,16 @@ resource "aws_route_table_association" "public_assoc" {
   route_table_id = aws_route_table.public_rt.id
 }
 
-resource "aws_route_table_association" "private_assoc" {
+resource "aws_route_table_association" "private_assoc_1" {
   subnet_id      = aws_subnet.private.id
   route_table_id = aws_route_table.private_rt.id
 }
 
-# 7. Security Group (Firewall rules for Redis)
+resource "aws_route_table_association" "private_assoc_2" {
+  subnet_id      = aws_subnet.private_2.id
+  route_table_id = aws_route_table.private_rt.id
+}
+
 resource "aws_security_group" "redis_sg" {
   name        = "redis-security-group"
   description = "Allow Redis traffic from within the VPC"
@@ -90,10 +99,9 @@ resource "aws_security_group" "redis_sg" {
   }
 }
 
-# 8. Redis Subnet Group & ElastiCache Cluster
 resource "aws_elasticache_subnet_group" "redis_subnet_group" {
   name       = "chat-redis-subnet-group"
-  subnet_ids = [aws_subnet.private.id]
+  subnet_ids = [aws_subnet.private.id, aws_subnet.private_2.id] # Both subnets now mapped
 }
 
 resource "aws_elasticache_cluster" "redis" {
@@ -108,7 +116,6 @@ resource "aws_elasticache_cluster" "redis" {
   security_group_ids   = [aws_security_group.redis_sg.id]
 }
 
-# 9. Output the Redis Connection URL so we can use it in Rust later
 output "redis_endpoint" {
   value = aws_elasticache_cluster.redis.cache_nodes[0].address
 }

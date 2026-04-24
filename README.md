@@ -11,21 +11,15 @@ cargo lambda build --release --bin authorizer --arm64
 cargo lambda deploy class-demo-env-backend
 ```
 ## frontend
-not tested
 ```
-npm create vite@latest ui -- --template react-ts
-cd ui
-npm install amazon-ivs-web-broadcast react-use-websocket lucide-react
-npm install -D tailwindcss postcss autoprefixer
-npx tailwindcss init -p
-npm install aws-amplify @aws-amplify/ui-react
+npm install
 npm run dev
 ```
 ## structure
 ```
 omegroup/                              # Your root project directory
 │
-├── infra/                             # ☁️ Phase 1: Terraform (Infrastructure as Code)
+├── infra/                             # Terraform (Infrastructure as Code)
 │   ├── .gitignore                     # Ignores sensitive .tfvars and local state
 │   ├── variables.tf                   # Defines region, CIDR blocks, hardware specs
 │   ├── terraform.tfvars               # The actual values (DO NOT COMMIT)
@@ -34,15 +28,16 @@ omegroup/                              # Your root project directory
 │   ├── database.tf                    # Amazon DynamoDB Table
 │   └── compute.tf                     # API Gateway, IAM Roles, and the 3 Lambda definitions
 │
-├── backend/                           # ⚙️ Phase 2: Rust (The Serverless Brain)
-│   ├── Cargo.toml                     # Dependencies (lambda_http, aws-sdk-ivs, redis, etc.)
+├── backend/                           # Rust (The Serverless Brain)
+│   ├── Cargo.toml                     
 │   └── src/
 │       ├── main.rs                    # The main WebSocket Hub ($connect, $disconnect, swipe, send_message)
+│       └── handlers.rs
 │       └── bin/
 │           ├── authorizer.rs          # The Edge Bouncer (Decodes Cognito JWTs before API Gateway)
 │           └── cron.rs                # The EventBridge Heartbeat (Loops 12x per min, generates IVS tokens)
 │
-└── ui/                                # 🖥️ Phase 3: React (The Edge Client)
+└── ui/                                # React (The Edge Client)
     ├── package.json                   # Vite, Tailwind, amazon-ivs-web-broadcast, aws-amplify
     ├── tailwind.config.js             # UI styling constraints
     └── src/
