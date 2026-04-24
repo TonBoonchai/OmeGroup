@@ -1,6 +1,6 @@
 mod handlers;
 
-use aws_sdk_apigatewaymanagementapi::Client as ApiGwClient;
+use aws_sdk_apigatewaymanagement::Client as ApiGwClient;
 use aws_sdk_ivsrealtime::Client as IvsClient;
 use lambda_http::{run, service_fn, Body, Error, Request, RequestExt, Response};
 use tracing::info;
@@ -22,7 +22,7 @@ async fn main() -> Result<(), Error> {
     
     // API Gateway requires the WSS URL to be swapped to HTTPS for pushing data back
     let endpoint_url = std::env::var("WSS_URL").expect("WSS_URL must be set").replace("wss://", "https://");
-    let apigw_config = aws_sdk_apigatewaymanagementapi::config::Builder::from(&shared_config)
+    let apigw_config = aws_sdk_apigatewaymanagement::config::Builder::from(&shared_config)
         .endpoint_url(endpoint_url)
         .build();
     
@@ -40,7 +40,7 @@ async fn function_handler(
     request: Request,
 ) -> Result<Response<Body>, Error> {
     let context = match request.request_context() {
-        lambda_http::request::RequestContext::ApiGatewayWebsocket(ctx) => ctx,
+        lambda_http::request::RequestContext::WebSocket(ctx) => ctx,
         _ => return Ok(Response::builder().status(400).body("Expected WebSocket context".into()).unwrap()),
     };
 
@@ -48,7 +48,13 @@ async fn function_handler(
     let route_key = context.route_key.clone().unwrap_or_default();
     
     // Extract the Cognito User ID verified by the Custom Authorizer
-    let user_id = context.authorizer.and_then(|auth| auth.principal_id).unwrap_or_default();
+    let user_id = context
+        .authorizer
+        .as_ref()
+        .and_then(|auth| auth.get("principalId"))
+        .and_then(|v| v.as_str())
+        .unwrap_or_default()
+        .to_string();
 
     info!("Received route: {} for user: {}", route_key, user_id);
 

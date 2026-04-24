@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import useWebSocket, { ReadyState } from 'react-use-websocket';
 import { fetchAuthSession } from 'aws-amplify/auth';
 
-const WS_BASE_URL = 'wss://YOUR_API_GATEWAY_ID.execute-api.us-east-1.amazonaws.com/production';
+const WS_BASE_URL = import.meta.env.VITE_WEBSOCKET_URL;
 
 export interface MatchPayload {
     stageArn: string;
