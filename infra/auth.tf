@@ -1,12 +1,9 @@
-# 1. The User Database
 resource "aws_cognito_user_pool" "chat_users" {
   name = "${var.environment_name}-user-pool"
 
-  # Users will log in with their email address
   username_attributes      = ["email"]
   auto_verified_attributes = ["email"]
 
-  # Strict production password policies
   password_policy {
     minimum_length    = 8
     require_lowercase = true
@@ -15,7 +12,6 @@ resource "aws_cognito_user_pool" "chat_users" {
     require_uppercase = true
   }
 
-  # Ensure the email is required upon sign-up
   schema {
     attribute_data_type      = "String"
     developer_only_attribute = false
@@ -30,12 +26,10 @@ resource "aws_cognito_user_pool" "chat_users" {
   }
 }
 
-# 2. The App Client (For React)
 resource "aws_cognito_user_pool_client" "react_client" {
   name         = "${var.environment_name}-react-client"
   user_pool_id = aws_cognito_user_pool.chat_users.id
 
-  # We do not generate a client secret because a browser (React) cannot securely hide it
   generate_secret = false
 
   explicit_auth_flows = [
@@ -44,7 +38,6 @@ resource "aws_cognito_user_pool_client" "react_client" {
   ]
 }
 
-# 3. Output the IDs you need for React
 output "cognito_user_pool_id" {
   value = aws_cognito_user_pool.chat_users.id
 }
