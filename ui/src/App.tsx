@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useMatchmaker } from "./hooks/useMatchmaker";
 import { VideoGrid } from "./components/VideoGrid";
 import { Send, LogOut } from "lucide-react";
@@ -212,6 +212,11 @@ function ChatApp({
     useMatchmaker(username);
   const [chatInput, setChatInput] = useState("");
   const isMobile = useIsMobile();
+  const chatBottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [chatMessages]);
 
   if (isTaken) {
     return (
@@ -361,6 +366,7 @@ function ChatApp({
                     {msg.text}
                   </div>
                 ))}
+                <div ref={chatBottomRef} />
               </div>
 
               {/* Chat input */}
