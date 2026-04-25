@@ -331,6 +331,7 @@ function ChatApp({
                 display: "flex",
                 flexDirection: "column",
                 flexShrink: 0,
+                minHeight: 0,
               }}
             >
               {/* Messages */}
@@ -338,10 +339,12 @@ function ChatApp({
                 style={{
                   flex: 1,
                   overflowY: "auto",
+                  WebkitOverflowScrolling: "touch",
                   padding: isMobile ? "6px 10px" : 12,
                   display: "flex",
                   flexDirection: "column",
                   gap: 6,
+                  minHeight: 0,
                 }}
               >
                 {chatMessages.length === 0 && (
