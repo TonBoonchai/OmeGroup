@@ -8,12 +8,9 @@ const VideoPlayer = ({ streams, isLocal }: { streams: any[], isLocal: boolean })
 
     useEffect(() => {
         if (videoRef.current && streams.length > 0) {
-            const videoStream = streams.find(s => s.streamType === 'video');
-            if (videoStream) {
-                const mediaStream = new MediaStream();
-                mediaStream.addTrack(videoStream.mediaStreamTrack);
-                videoRef.current.srcObject = mediaStream;
-            }
+            const mediaStream = new MediaStream();
+            streams.forEach(s => mediaStream.addTrack(s.mediaStreamTrack));
+            videoRef.current.srcObject = mediaStream;
         }
     }, [streams]);
 
