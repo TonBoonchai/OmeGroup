@@ -1,7 +1,6 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import _wsModule, { ReadyState } from 'react-use-websocket';
 const useWebSocket: typeof _wsModule = (_wsModule as any).default ?? _wsModule;
-import { fetchAuthSession } from 'aws-amplify/auth';
 
 const WS_BASE_URL = import.meta.env.VITE_WEBSOCKET_URL;
 
@@ -15,70 +14,49 @@ export interface ChatMessage {
     text: string;
 }
 
-export function useMatchmaker() {
+export function useMatchmaker(username: string) {
     const [matchData, setMatchData] = useState<MatchPayload | null>(null);
-    const [wsUrl, setWsUrl] = useState<string | null>(null);
     const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+    const [isTaken, setIsTaken] = useState(false);
+    const everConnected = useRef(false);
 
-    // 1. Fetch the JWT before connecting
-    useEffect(() => {
-        const getAuthToken = async () => {
-            try {
-                const session = await fetchAuthSession();
-                const token = session.tokens?.accessToken?.toString();
-                if (token) {
-                    setWsUrl(`${WS_BASE_URL}?token=${token}`);
-                }
-            } catch (err) {
-                console.error("No valid session found", err);
-            }
-        };
-        getAuthToken();
-    }, []);
+    const wsUrl = `${WS_BASE_URL}?username=${encodeURIComponent(username)}`;
 
-    // 2. WebSocket connection
     const { sendJsonMessage, lastJsonMessage, readyState } = useWebSocket(wsUrl, {
-        shouldReconnect: () => true,
-        reconnectAttempts: 10,
-        reconnectInterval: 3000,
-        onOpen: () => console.log('Connected to AWS Matchmaker Securely'),
+        shouldReconnect: () => false,
+        onOpen: () => {
+            everConnected.current = true;
+            console.log('Connected as', username);
+        },
+        onClose: () => {
+            // If we closed before onOpen ever fired, $connect was rejected = username taken
+            if (!everConnected.current) setIsTaken(true);
+        },
     });
 
-    // 3. Centralized Message Handler
     useEffect(() => {
         if (lastJsonMessage !== null) {
             const data = lastJsonMessage as any;
 
-            // Handle Match found (Either direct or via 'type' property)
             if (data.type === 'match' || (data.participantToken && data.stageArn)) {
-                console.log('Match found! Hydrating IVS Stage...');
-                setMatchData({
-                    stageArn: data.stageArn,
-                    participantToken: data.participantToken
-                });
-                setChatMessages([]); // Reset chat for the new pair
-            } 
-            
-            // Handle Incoming Chat
-            else if (data.type === 'chat') {
+                setMatchData({ stageArn: data.stageArn, participantToken: data.participantToken });
+                setChatMessages([]);
+            } else if (data.type === 'chat') {
                 setChatMessages(prev => [...prev, { sender: data.sender || 'Peer', text: data.text }]);
             }
         }
     }, [lastJsonMessage]);
 
-    // Actions
     const swipe = useCallback(() => {
-        console.log('Swiping! Requesting new room...');
-        setMatchData(null); 
+        setMatchData(null);
         setChatMessages([]);
         sendJsonMessage({ action: 'swipe' });
     }, [sendJsonMessage]);
 
     const sendMessage = useCallback((text: string) => {
         sendJsonMessage({ action: 'send_message', text });
-        // Optimistically add to local UI
-        setChatMessages(prev => [...prev, { sender: 'Me', text }]); 
-    }, [sendJsonMessage]);
+        setChatMessages(prev => [...prev, { sender: username, text }]);
+    }, [sendJsonMessage, username]);
 
     const connectionStatus = {
         [ReadyState.CONNECTING]: 'Connecting...',
@@ -86,7 +64,7 @@ export function useMatchmaker() {
         [ReadyState.CLOSING]: 'Closing...',
         [ReadyState.CLOSED]: 'Disconnected',
         [ReadyState.UNINSTANTIATED]: 'Uninstantiated',
-    }[readyState];
+    }[readyState] ?? 'Unknown';
 
     return {
         matchData,
@@ -94,6 +72,7 @@ export function useMatchmaker() {
         swipe,
         sendMessage,
         connectionStatus,
-        isConnected: readyState === ReadyState.OPEN
+        isConnected: readyState === ReadyState.OPEN,
+        isTaken,
     };
 }

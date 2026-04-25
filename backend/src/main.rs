@@ -7,29 +7,24 @@ use tracing::info;
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
-    // Initialize standard logging
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::INFO)
         .without_time()
         .init();
 
-    // Setup Redis
     let redis_url = std::env::var("REDIS_URL").expect("REDIS_URL must be set");
     let redis_client = redis::Client::open(redis_url)?;
 
-    // Setup AWS SDKs
     let shared_config = aws_config::load_from_env().await;
-    
-    // API Gateway requires the WSS URL to be swapped to HTTPS for pushing data back
+
     let endpoint_url = std::env::var("WSS_URL").expect("WSS_URL must be set").replace("wss://", "https://");
     let apigw_config = aws_sdk_apigatewaymanagement::config::Builder::from(&shared_config)
         .endpoint_url(endpoint_url)
         .build();
-    
+
     let apigw_client = ApiGwClient::from_conf(apigw_config);
     let ivs_client = IvsClient::new(&shared_config);
 
-    // Start the serverless Lambda listener
     run(service_fn(|req| function_handler(&redis_client, &apigw_client, &ivs_client, req))).await
 }
 
@@ -46,26 +41,31 @@ async fn function_handler(
 
     let connection_id = context.connection_id.clone().unwrap_or_default();
     let route_key = context.route_key.clone().unwrap_or_default();
-    
-    // Extract the Cognito User ID verified by the Custom Authorizer
-    let user_id = context
-        .authorizer
-        .as_ref()
-        .and_then(|auth| auth.get("principalId"))
-        .and_then(|v| v.as_str())
+
+    // On $connect, read username from query string ?username=foo
+    let username = request
+        .query_string_parameters()
+        .first("username")
         .unwrap_or_default()
         .to_string();
 
-    info!("Received route: {} for user: {}", route_key, user_id);
+    info!("Received route: {} for user: {}", route_key, username);
 
     let mut con = redis_client.get_async_connection().await?;
 
-    // THE ROUTER
     match route_key.as_str() {
-        "$connect" => handlers::handle_connect(&mut con, &connection_id, &user_id).await?,
+        "$connect" => {
+            if username.is_empty() {
+                return Ok(Response::builder().status(403).body("username required".into()).unwrap());
+            }
+            let taken = handlers::handle_connect(&mut con, &connection_id, &username).await?;
+            if taken {
+                return Ok(Response::builder().status(403).body("username taken".into()).unwrap());
+            }
+        }
         "$disconnect" => handlers::handle_disconnect(&mut con, ivs_client, &connection_id, false).await?,
         "swipe" => handlers::handle_swipe(&mut con, ivs_client, &connection_id).await?,
-        "send_message" => handlers::handle_send_message(&mut con, apigw_client, request, &connection_id, &user_id).await?,
+        "send_message" => handlers::handle_send_message(&mut con, apigw_client, request, &connection_id).await?,
         _ => info!("Unknown route: {}", route_key),
     }
 

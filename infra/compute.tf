@@ -93,45 +93,12 @@ resource "aws_lambda_permission" "apigw_lambda" {
   source_arn    = "${aws_apigatewayv2_api.websocket_api.execution_arn}/*/*"
 }
 
-# 4. Authorizer Lambda
-resource "aws_lambda_function" "chat_authorizer" {
-  function_name = "${var.environment_name}-authorizer"
-  filename      = "dummy_payload.zip" 
-  handler       = "main.handler"
-  runtime       = "provided.al2023"
-  role          = aws_iam_role.chat_lambda_role.arn
-  
-  environment {
-    variables = {
-      COGNITO_REGION = var.aws_region
-      USER_POOL_ID   = aws_cognito_user_pool.chat_users.id
-      CLIENT_ID      = aws_cognito_user_pool_client.react_client.id
-    }
-  }
-}
-
-resource "aws_lambda_permission" "apigw_authorizer" {
-  statement_id  = "AllowAuthorizerExecutionFromAPIGateway"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.chat_authorizer.function_name
-  principal     = "apigateway.amazonaws.com"
-}
-
-resource "aws_apigatewayv2_authorizer" "cognito_authorizer" {
-  api_id           = aws_apigatewayv2_api.websocket_api.id
-  authorizer_type  = "REQUEST"
-  authorizer_uri   = aws_lambda_function.chat_authorizer.invoke_arn
-  identity_sources = ["route.request.querystring.token"]
-  name             = "cognito-jwt-authorizer"
-}
-
-# 5. API Gateway Routes
+# 4. API Gateway Routes
 resource "aws_apigatewayv2_route" "connect_route" {
   api_id             = aws_apigatewayv2_api.websocket_api.id
   route_key          = "$connect"
   target             = "integrations/${aws_apigatewayv2_integration.lambda_integration.id}"
-  authorization_type = "CUSTOM"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito_authorizer.id
+  authorization_type = "NONE"
 }
 
 resource "aws_apigatewayv2_route" "disconnect_route" {

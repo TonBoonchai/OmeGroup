@@ -6,19 +6,33 @@ use redis::AsyncCommands;
 use serde_json::Value;
 use tracing::info;
 
+// Returns true if username was already taken (connection should be rejected)
 pub async fn handle_connect(
     con: &mut redis::aio::Connection,
     connection_id: &str,
-    user_id: &str,
-) -> Result<(), Error> {
-    // Map the temporary API Gateway connection ID to the permanent Cognito User ID
-    let _: () = con.hset(format!("conn:{}", connection_id), "user_id", user_id).await?;
-    
-    // Add them to the global matchmaking queue
+    username: &str,
+) -> Result<bool, Error> {
+    // Try to set username key only if it doesn't exist (NX = only if Not eXists)
+    let claimed: bool = redis::cmd("SET")
+        .arg(format!("username:{}", username))
+        .arg(connection_id)
+        .arg("NX")
+        .query_async(con)
+        .await?;
+
+    if !claimed {
+        info!("Username {} is already taken.", username);
+        return Ok(true);
+    }
+
+    // Map connection ID -> username for lookup on disconnect/message
+    let _: () = con.hset(format!("conn:{}", connection_id), "username", username).await?;
+
+    // Add to matchmaking queue
     let _: () = con.rpush("waiting_queue", connection_id).await?;
-    info!("User {} queued for matchmaking.", user_id);
-    
-    Ok(())
+    info!("User {} queued for matchmaking.", username);
+
+    Ok(false)
 }
 
 pub async fn handle_disconnect(
@@ -27,19 +41,20 @@ pub async fn handle_disconnect(
     connection_id: &str,
     is_swipe: bool,
 ) -> Result<(), Error> {
+    // Free the username so others can take it
+    let username: Option<String> = con.hget(format!("conn:{}", connection_id), "username").await?;
+    if let Some(name) = &username {
+        let _: () = con.del(format!("username:{}", name)).await?;
+    }
+
     let user_key = format!("user:{}", connection_id);
     let stage_arn: Option<String> = con.hget(&user_key, "stage_arn").await?;
 
     if let Some(arn) = stage_arn {
         let room_key = format!("room:{}", arn);
-        
-        // Remove user from the room's set
         let _: () = con.srem(&room_key, connection_id).await?;
-        
-        // Decrement the active participant count and capture the new total
         let current_capacity: i32 = con.zincr("active_rooms", &arn, -1).await?;
 
-        // If the room is empty, destroy the physical AWS resource to stop hourly billing
         if current_capacity <= 0 {
             info!("Room {} is empty. Destroying IVS Stage.", arn);
             let _: () = con.zrem("active_rooms", &arn).await?;
@@ -48,14 +63,12 @@ pub async fn handle_disconnect(
         }
     }
 
-    // Purge user data
     let _: () = con.del(&user_key).await?;
     let _: () = con.del(format!("conn:{}", connection_id)).await?;
 
     if is_swipe {
-        // A swipe immediately throws them back into the waiting pool
         let _: () = con.rpush("waiting_queue", connection_id).await?;
-        info!("User {} swiped and re-queued.", connection_id);
+        info!("User {:?} swiped and re-queued.", username);
     }
 
     Ok(())
@@ -66,7 +79,6 @@ pub async fn handle_swipe(
     ivs_client: &IvsClient,
     connection_id: &str,
 ) -> Result<(), Error> {
-    // Swiping is logically identical to disconnecting, but triggers the re-queue flag
     handle_disconnect(con, ivs_client, connection_id, true).await
 }
 
@@ -75,7 +87,6 @@ pub async fn handle_send_message(
     apigw_client: &ApiGwClient,
     request: Request,
     connection_id: &str,
-    user_id: &str,
 ) -> Result<(), Error> {
     if let Body::Text(body_str) = request.body() {
         let body: Value = serde_json::from_str(body_str).unwrap_or_default();
@@ -85,21 +96,25 @@ pub async fn handle_send_message(
             return Ok(());
         }
 
+        // Look up sender's display name
+        let username: String = con
+            .hget(format!("conn:{}", connection_id), "username")
+            .await
+            .unwrap_or_else(|_| "Unknown".to_string());
+
         let stage_arn: Option<String> = con.hget(format!("user:{}", connection_id), "stage_arn").await?;
-        
+
         if let Some(arn) = stage_arn {
-            // Retrieve everyone currently in this room
             let peers: Vec<String> = con.smembers(format!("room:{}", arn)).await?;
-            
+
             let chat_payload = serde_json::json!({
                 "type": "chat",
-                "sender": user_id,
+                "sender": username,
                 "text": text
             });
-            
+
             let blob = Blob::new(chat_payload.to_string().into_bytes());
 
-            // Push message down the WebSocket to every peer
             for peer_id in peers {
                 let _ = apigw_client.post_to_connection()
                     .connection_id(&peer_id)
