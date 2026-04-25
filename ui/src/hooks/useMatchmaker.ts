@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
-import useWebSocket, { ReadyState } from 'react-use-websocket';
+import _wsModule, { ReadyState } from 'react-use-websocket';
+const useWebSocket: typeof _wsModule = (_wsModule as any).default ?? _wsModule;
 import { fetchAuthSession } from 'aws-amplify/auth';
 
 const WS_BASE_URL = import.meta.env.VITE_WEBSOCKET_URL;
@@ -37,8 +38,6 @@ export function useMatchmaker() {
 
     // 2. WebSocket connection
     const { sendJsonMessage, lastJsonMessage, readyState } = useWebSocket(wsUrl, {
-        // Only connect when wsUrl is valid
-        connect: wsUrl !== null, 
         shouldReconnect: () => true,
         reconnectAttempts: 10,
         reconnectInterval: 3000,

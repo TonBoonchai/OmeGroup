@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Stage, LocalStageStream, StageEvents, SubscribeType } from 'amazon-ivs-web-broadcast';
-import { MatchPayload } from '../hooks/useMatchmaker';
+import type { MatchPayload } from '../hooks/useMatchmaker';
 
 // --- 1. The Raw DOM Video Binder (Unchanged) ---
 const VideoPlayer = ({ streams, isLocal }: { streams: any[], isLocal: boolean }) => {
