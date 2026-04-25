@@ -99,7 +99,7 @@ export const VideoGrid: React.FC<VideoGridProps> = ({ matchData, isConnected }) 
     const totalPeople = 1 + remoteParticipants.length;
     let gridClass = "grid-cols-1"; 
     
-    if (matchData && totalPeople === 2) gridClass = "sm:grid-cols-2"; 
+    if (matchData && totalPeople === 2) gridClass = "grid-cols-1";
     else if (matchData && (totalPeople === 3 || totalPeople === 4)) gridClass = "grid-cols-2 sm:grid-rows-2";
     else if (matchData && totalPeople > 4) gridClass = "grid-cols-3 sm:grid-rows-2"; 
 
