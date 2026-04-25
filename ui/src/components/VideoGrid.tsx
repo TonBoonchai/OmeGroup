@@ -80,6 +80,7 @@ export const VideoGrid: React.FC<VideoGridProps> = ({ matchData, isConnected }) 
         stageRef.current = stage;
 
         stage.on(StageEvents.STAGE_PARTICIPANT_STREAMS_ADDED, (participant: any, streams: any[]) => {
+            if (participant.isLocal) return;
             setRemoteParticipants(prev => [...prev, { id: participant.id, streams }]);
         });
 

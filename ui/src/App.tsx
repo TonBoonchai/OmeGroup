@@ -1,148 +1,452 @@
-import { useState } from 'react';
-import { useMatchmaker } from './hooks/useMatchmaker';
-import { VideoGrid } from './components/VideoGrid';
-import { RefreshCw, Send, LogIn } from 'lucide-react';
+import { useState } from "react";
+import { useMatchmaker } from "./hooks/useMatchmaker";
+import { VideoGrid } from "./components/VideoGrid";
+import { Send, LogOut } from "lucide-react";
 
-function UsernameGate({ onJoin }: { onJoin: (name: string) => void }) {
-    const [input, setInput] = useState('');
+const ORANGE = "#E05E36";
+const GREEN = "#42A77E";
 
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        const name = input.trim();
-        if (name) onJoin(name);
-    };
-
-    return (
-        <div className="min-h-screen bg-black flex items-center justify-center">
-            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-10 flex flex-col items-center gap-6 w-full max-w-sm">
-                <h1 className="text-2xl font-bold tracking-widest text-blue-400">
-                    RANDOM<span className="text-white">CHAT</span>
-                </h1>
-                <p className="text-gray-400 text-sm text-center">Choose a display name to join</p>
-                <form onSubmit={handleSubmit} className="w-full flex flex-col gap-3">
-                    <input
-                        autoFocus
-                        type="text"
-                        maxLength={20}
-                        placeholder="Your name..."
-                        value={input}
-                        onChange={e => setInput(e.target.value)}
-                        className="w-full bg-gray-800 rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 text-white"
-                    />
-                    <button
-                        type="submit"
-                        disabled={!input.trim()}
-                        className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 px-4 py-3 rounded-lg font-bold transition-all disabled:opacity-40"
-                    >
-                        <LogIn size={18} /> Join
-                    </button>
-                </form>
-            </div>
-        </div>
-    );
+function OmeLogo({ size = "lg" }: { size?: "lg" | "sm" }) {
+  const fontSize = size === "lg" ? 96 : 32;
+  return (
+    <span
+      style={{ fontSize, fontWeight: 800, letterSpacing: -1, lineHeight: 1 }}
+    >
+      <span style={{ color: ORANGE }}>Ome</span>
+      <span style={{ color: GREEN }}>Group</span>
+    </span>
+  );
 }
 
-function ChatApp({ username, onLeave }: { username: string; onLeave: () => void }) {
-    const { matchData, swipe, connectionStatus, isConnected, isTaken, chatMessages, sendMessage } = useMatchmaker(username);
-    const [chatInput, setChatInput] = useState('');
+function Circle({
+  size,
+  style,
+}: {
+  size: number;
+  style?: React.CSSProperties;
+}) {
+  return (
+    <div
+      style={{
+        width: size,
+        height: size,
+        borderRadius: "50%",
+        backgroundColor: ORANGE,
+        flexShrink: 0,
+        ...style,
+      }}
+    />
+  );
+}
 
-    // Username was taken — kick back to gate
-    if (isTaken) {
-        return (
-            <div className="min-h-screen bg-black flex items-center justify-center">
-                <div className="bg-gray-900 border border-red-800 rounded-2xl p-10 flex flex-col items-center gap-6 w-full max-w-sm">
-                    <h2 className="text-xl font-bold text-red-400">Username taken</h2>
-                    <p className="text-gray-400 text-sm text-center">
-                        <span className="text-white font-semibold">"{username}"</span> is already in use. Pick another name.
-                    </p>
-                    <button
-                        onClick={onLeave}
-                        className="bg-blue-600 hover:bg-blue-500 px-6 py-2 rounded-lg font-bold transition-all"
-                    >
-                        Go back
-                    </button>
-                </div>
-            </div>
-        );
-    }
+function UsernameGate({ onJoin }: { onJoin: (name: string) => void }) {
+  const [input, setInput] = useState("");
 
-    const handleSend = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (chatInput.trim()) {
-            sendMessage(chatInput);
-            setChatInput('');
-        }
-    };
+  const handleSubmit = (e: React.SyntheticEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const name = input.trim();
+    if (name) onJoin(name);
+  };
 
-    return (
-        <div className="min-h-screen bg-black flex flex-col text-white">
-            <div className="w-full h-16 border-b border-gray-800 flex items-center justify-between px-6 bg-gray-900 z-50">
-                <h1 className="text-xl font-bold tracking-widest text-blue-400">
-                    RANDOM<span className="text-white">CHAT</span>
-                </h1>
-                <div className="flex items-center gap-4">
-                    <span className="text-sm text-gray-400 hidden sm:block">{connectionStatus}</span>
-                    <span className="text-sm text-blue-300 font-semibold">{username}</span>
-                    <button
-                        onClick={swipe}
-                        disabled={!isConnected}
-                        className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded-full font-bold transition-all disabled:opacity-50"
-                    >
-                        <RefreshCw size={18} className={!matchData && isConnected ? 'animate-spin' : ''} />
-                        SWIPE
-                    </button>
-                    <button
-                        onClick={onLeave}
-                        className="text-sm text-gray-500 hover:text-red-400 transition-all"
-                    >
-                        Leave
-                    </button>
-                </div>
-            </div>
+  return (
+    /* Full-screen orange frame */
+    <div
+      style={{
+        height: "100vh",
+        backgroundColor: "#1a1a1a",
+        padding: 16,
+        boxSizing: "border-box",
+        display: "flex",
+      }}
+    >
+      <div
+        style={{
+          flex: 1,
+          backgroundColor: ORANGE,
+          borderRadius: 20,
+          padding: 10,
+          display: "flex",
+        }}
+      >
+        {/* White inner, centered content */}
+        <div
+          style={{
+            flex: 1,
+            backgroundColor: "white",
+            borderRadius: 12,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            position: "relative",
+            overflow: "hidden",
+          }}
+        >
+          {/* Decorative circles top-right */}
+          <Circle
+            size={80}
+            style={{ position: "absolute", top: 32, right: 40 }}
+          />
+          <Circle
+            size={56}
+            style={{ position: "absolute", top: 120, right: 64 }}
+          />
 
-            <div className="flex-1 w-full flex p-4 gap-4 max-w-screen-2xl mx-auto overflow-hidden">
-                <div className="flex-[3] relative">
-                    <VideoGrid matchData={matchData} isConnected={isConnected} />
-                </div>
-
-                {matchData && (
-                    <div className="flex-1 bg-gray-900 rounded-xl border border-gray-800 flex flex-col overflow-hidden">
-                        <div className="p-4 border-b border-gray-800 font-bold">Room Chat</div>
-                        <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
-                            {chatMessages.map((msg, idx) => (
-                                <div key={idx} className={`max-w-[80%] rounded-lg p-3 ${msg.sender === username ? 'bg-blue-600 self-end' : 'bg-gray-800 self-start'}`}>
-                                    <div className="text-xs text-gray-300 mb-1">{msg.sender}</div>
-                                    <div className="text-sm">{msg.text}</div>
-                                </div>
-                            ))}
-                        </div>
-                        <form onSubmit={handleSend} className="p-3 border-t border-gray-800 flex gap-2">
-                            <input
-                                type="text"
-                                value={chatInput}
-                                onChange={e => setChatInput(e.target.value)}
-                                placeholder="Type a message..."
-                                className="flex-1 bg-gray-800 rounded-lg px-4 py-2 outline-none focus:ring-2 focus:ring-blue-500"
-                            />
-                            <button type="submit" className="bg-blue-600 p-2 rounded-lg hover:bg-blue-500">
-                                <Send size={20} />
-                            </button>
-                        </form>
-                    </div>
-                )}
-            </div>
+          {/* Form card */}
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: 32,
+              width: 480,
+            }}
+          >
+            <OmeLogo size="lg" />
+            <p
+              style={{
+                color: "#6b7280",
+                fontSize: 22,
+                margin: 0,
+                fontWeight: 600,
+              }}
+            >
+              Choose a display name
+            </p>
+            <form
+              onSubmit={handleSubmit}
+              style={{
+                width: "100%",
+                display: "flex",
+                flexDirection: "column",
+                gap: 12,
+              }}
+            >
+              <input
+                autoFocus
+                type="text"
+                maxLength={20}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                style={{
+                  width: "100%",
+                  border: `2px solid ${ORANGE}`,
+                  borderRadius: 8,
+                  padding: "12px 16px",
+                  fontSize: 25,
+                  outline: "none",
+                  color: "#1f2937",
+                  boxSizing: "border-box",
+                }}
+              />
+              <button
+                type="submit"
+                disabled={!input.trim()}
+                style={{
+                  width: "100%",
+                  backgroundColor: ORANGE,
+                  color: "white",
+                  border: "none",
+                  borderRadius: 8,
+                  padding: "12px 0",
+                  fontSize: 15,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  opacity: input.trim() ? 1 : 0.4,
+                }}
+              >
+                Join
+              </button>
+            </form>
+          </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function ChatApp({
+  username,
+  onLeave,
+}: {
+  username: string;
+  onLeave: () => void;
+}) {
+  const { matchData, swipe, isConnected, isTaken, chatMessages, sendMessage } =
+    useMatchmaker(username);
+  const [chatInput, setChatInput] = useState("");
+
+  if (isTaken) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          backgroundColor: "#1a1a1a",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <div
+          style={{
+            backgroundColor: ORANGE,
+            borderRadius: 24,
+            padding: 12,
+            width: 460,
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: "white",
+              borderRadius: 16,
+              padding: "56px 48px",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: 24,
+            }}
+          >
+            <OmeLogo size="lg" />
+            <p style={{ color: "#374151", textAlign: "center", margin: 0 }}>
+              <strong>"{username}"</strong> is already in use.
+              <br />
+              Pick another name.
+            </p>
+            <button
+              onClick={onLeave}
+              style={{
+                backgroundColor: ORANGE,
+                color: "white",
+                border: "none",
+                borderRadius: 8,
+                padding: "12px 32px",
+                fontWeight: 700,
+                fontSize: 15,
+                cursor: "pointer",
+                width: "100%",
+              }}
+            >
+              Go back
+            </button>
+          </div>
+        </div>
+      </div>
     );
+  }
+
+  const handleSend = (e: React.SyntheticEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (chatInput.trim()) {
+      sendMessage(chatInput);
+      setChatInput("");
+    }
+  };
+
+  return (
+    /* Full-screen dark bg */
+    <div
+      style={{
+        height: "100vh",
+        backgroundColor: "#1a1a1a",
+        padding: 16,
+        boxSizing: "border-box",
+        display: "flex",
+      }}
+    >
+      {/* Orange frame fills the space */}
+      <div
+        style={{
+          flex: 1,
+          backgroundColor: ORANGE,
+          borderRadius: 20,
+          padding: 10,
+          display: "flex",
+        }}
+      >
+        {/* White inner */}
+        <div
+          style={{
+            flex: 1,
+            backgroundColor: "white",
+            borderRadius: 12,
+            display: "flex",
+            flexDirection: "column",
+            overflow: "hidden",
+          }}
+        >
+          {/* Main row: video + chat */}
+          <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
+            {/* Video area */}
+            <div style={{ flex: 1, padding: 12, overflow: "hidden" }}>
+              <VideoGrid matchData={matchData} isConnected={isConnected} />
+            </div>
+
+            {/* Chat sidebar */}
+            <div
+              style={{
+                width: 260,
+                borderLeft: `2px solid ${ORANGE}`,
+                display: "flex",
+                flexDirection: "column",
+              }}
+            >
+              {/* Header */}
+              <div
+                style={{
+                  padding: "14px 16px",
+                  fontWeight: 700,
+                  color: ORANGE,
+                  borderBottom: `2px solid ${ORANGE}`,
+                  fontSize: 15,
+                }}
+              >
+                Room Chat
+              </div>
+
+              {/* Messages */}
+              <div
+                style={{
+                  flex: 1,
+                  overflowY: "auto",
+                  padding: 12,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 8,
+                }}
+              >
+                {chatMessages.map((msg, idx) => (
+                  <div
+                    key={idx}
+                    style={{
+                      maxWidth: "90%",
+                      alignSelf:
+                        msg.sender === username ? "flex-end" : "flex-start",
+                      backgroundColor:
+                        msg.sender === username ? ORANGE : "#e5e7eb",
+                      color: msg.sender === username ? "white" : "#1f2937",
+                      borderRadius: 12,
+                      padding: "8px 12px",
+                      fontSize: 13,
+                    }}
+                  >
+                    <div
+                      style={{ fontSize: 11, opacity: 0.7, marginBottom: 2 }}
+                    >
+                      {msg.sender}
+                    </div>
+                    {msg.text}
+                  </div>
+                ))}
+              </div>
+
+              {/* Input */}
+              <form
+                onSubmit={handleSend}
+                style={{
+                  padding: 10,
+                  borderTop: `2px solid ${ORANGE}`,
+                  display: "flex",
+                  gap: 8,
+                }}
+              >
+                <input
+                  type="text"
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  placeholder="Write a message"
+                  style={{
+                    flex: 1,
+                    backgroundColor: "#f3f4f6",
+                    borderRadius: 8,
+                    padding: "8px 12px",
+                    fontSize: 13,
+                    border: "none",
+                    outline: "none",
+                    color: "#1f2937",
+                  }}
+                />
+                <button
+                  type="submit"
+                  style={{
+                    backgroundColor: ORANGE,
+                    color: "white",
+                    border: "none",
+                    borderRadius: 8,
+                    padding: "8px 10px",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                  }}
+                >
+                  <Send size={15} />
+                </button>
+              </form>
+            </div>
+          </div>
+
+          {/* Bottom bar */}
+          <div
+            style={{
+              borderTop: `2px solid ${ORANGE}`,
+              padding: "12px 20px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+            }}
+          >
+            <button
+              onClick={swipe}
+              disabled={!isConnected}
+              style={{
+                backgroundColor: GREEN,
+                color: "white",
+                border: "none",
+                borderRadius: 12,
+                padding: "12px 48px",
+                fontWeight: 700,
+                fontSize: 18,
+                cursor: "pointer",
+                opacity: isConnected ? 1 : 0.4,
+              }}
+            >
+              Next
+            </button>
+
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <span style={{ fontWeight: 600, color: "#374151", fontSize: 14 }}>
+                {username}
+              </span>
+              <button
+                onClick={onLeave}
+                title="Leave"
+                style={{
+                  backgroundColor: ORANGE,
+                  color: "white",
+                  border: "none",
+                  borderRadius: 10,
+                  padding: "10px 14px",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                }}
+              >
+                <LogOut size={18} />
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function App() {
-    const [username, setUsername] = useState<string | null>(null);
+  const [username, setUsername] = useState<string | null>(null);
 
-    if (!username) {
-        return <UsernameGate onJoin={setUsername} />;
-    }
+  if (!username) {
+    return <UsernameGate onJoin={setUsername} />;
+  }
 
-    return <ChatApp username={username} onLeave={() => setUsername(null)} />;
+  return <ChatApp username={username} onLeave={() => setUsername(null)} />;
 }
 
 export default App;

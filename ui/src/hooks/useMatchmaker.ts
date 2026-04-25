@@ -42,7 +42,10 @@ export function useMatchmaker(username: string) {
                 setMatchData({ stageArn: data.stageArn, participantToken: data.participantToken });
                 setChatMessages([]);
             } else if (data.type === 'chat') {
-                setChatMessages(prev => [...prev, { sender: data.sender || 'Peer', text: data.text }]);
+                // Skip echo of our own messages — we add them locally on send
+                if (data.sender && data.sender !== username) {
+                    setChatMessages(prev => [...prev, { sender: data.sender, text: data.text }]);
+                }
             }
         }
     }, [lastJsonMessage]);
