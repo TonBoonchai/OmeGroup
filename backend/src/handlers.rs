@@ -41,12 +41,18 @@ pub async fn handle_disconnect(
     connection_id: &str,
     is_swipe: bool,
 ) -> Result<(), Error> {
-    // Free the username so others can take it
     let username: Option<String> = con.hget(format!("conn:{}", connection_id), "username").await?;
-    if let Some(name) = &username {
-        let _: () = con.del(format!("username:{}", name)).await?;
+
+    // On real disconnect: free username so others can claim it and delete conn mapping
+    // On swipe: keep both so the user stays logged in with the same name
+    if !is_swipe {
+        if let Some(name) = &username {
+            let _: () = con.del(format!("username:{}", name)).await?;
+        }
+        let _: () = con.del(format!("conn:{}", connection_id)).await?;
     }
 
+    // Clean up room/stage state regardless
     let user_key = format!("user:{}", connection_id);
     let stage_arn: Option<String> = con.hget(&user_key, "stage_arn").await?;
 
@@ -64,7 +70,6 @@ pub async fn handle_disconnect(
     }
 
     let _: () = con.del(&user_key).await?;
-    let _: () = con.del(format!("conn:{}", connection_id)).await?;
 
     if is_swipe {
         let _: () = con.rpush("waiting_queue", connection_id).await?;

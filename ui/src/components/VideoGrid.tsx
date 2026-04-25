@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Stage, LocalStageStream, StageEvents, SubscribeType } from 'amazon-ivs-web-broadcast';
 import type { MatchPayload } from '../hooks/useMatchmaker';
 
-// --- 1. The Raw DOM Video Binder (Unchanged) ---
 const VideoPlayer = ({ streams, isLocal }: { streams: any[], isLocal: boolean }) => {
     const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -20,8 +19,8 @@ const VideoPlayer = ({ streams, isLocal }: { streams: any[], isLocal: boolean })
                 ref={videoRef}
                 autoPlay
                 playsInline
-                muted={isLocal} 
-                className={`w-full h-full object-cover ${isLocal ? 'scale-x-[-1]' : ''}`} 
+                muted={isLocal}
+                className={`w-full h-full object-cover ${isLocal ? 'scale-x-[-1]' : ''}`}
             />
             {isLocal && (
                 <div className="absolute bottom-4 left-4 bg-black/60 px-3 py-1 rounded text-white text-sm font-semibold z-10">
@@ -32,101 +31,108 @@ const VideoPlayer = ({ streams, isLocal }: { streams: any[], isLocal: boolean })
     );
 };
 
-// --- 2. The Main Stage Orchestrator ---
 interface VideoGridProps {
-    matchData: MatchPayload | null; // Now accepts null when searching
+    matchData: MatchPayload | null;
     isConnected: boolean;
 }
 
 export const VideoGrid: React.FC<VideoGridProps> = ({ matchData, isConnected }) => {
     const [localStreams, setLocalStreams] = useState<LocalStageStream[]>([]);
     const [remoteParticipants, setRemoteParticipants] = useState<{ id: string; streams: any[] }[]>([]);
-    const stageRef = useRef<Stage | null>(null);
 
-    // Step 1: Request Hardware Access Immediately & Permanently
+    // Use refs so the IVS effect never needs to re-run due to stream/stage changes
+    const stageRef = useRef<Stage | null>(null);
+    const localStreamsRef = useRef<LocalStageStream[]>([]);
+
+    // Step 1: Acquire camera/mic once — store in both state (for rendering) and ref (for IVS strategy)
     useEffect(() => {
         let activeTracks: MediaStreamTrack[] = [];
 
-        const initLocalMedia = async () => {
+        const init = async () => {
             try {
                 const mediaStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
                 activeTracks = mediaStream.getTracks();
-                const ivsStreams = activeTracks.map(track => new LocalStageStream(track));
+                const ivsStreams = activeTracks.map(t => new LocalStageStream(t));
+                localStreamsRef.current = ivsStreams;
                 setLocalStreams(ivsStreams);
             } catch (err) {
-                console.error("Camera access denied or failed", err);
+                console.error('Camera/mic access failed', err);
             }
         };
 
-        initLocalMedia();
+        init();
         return () => { activeTracks.forEach(t => t.stop()); };
     }, []);
 
-    // Step 2: Hydrate AWS IVS ONLY when matchData is provided
+    // Step 2: Join/leave IVS stage — only depends on matchData (token), NOT localStreams state
     useEffect(() => {
-        if (!matchData || !matchData.participantToken || localStreams.length === 0) return;
+        if (!matchData?.participantToken) {
+            // No match — leave any existing stage
+            if (stageRef.current) {
+                stageRef.current.leave();
+                stageRef.current = null;
+            }
+            setRemoteParticipants([]);
+            return;
+        }
 
-        let active = true; // guard against stale events after cleanup
+        // Always leave the previous stage before joining a new one
+        if (stageRef.current) {
+            stageRef.current.leave();
+            stageRef.current = null;
+        }
+        setRemoteParticipants([]);
 
-        const strategy = {
-            stageStreamsToPublish: () => localStreams,
+        const stage = new Stage(matchData.participantToken, {
+            stageStreamsToPublish: () => localStreamsRef.current,
             shouldPublishParticipant: () => true,
             shouldSubscribeToParticipant: () => SubscribeType.AUDIO_VIDEO,
-        };
+        });
 
-        const stage = new Stage(matchData.participantToken, strategy);
         stageRef.current = stage;
 
         stage.on(StageEvents.STAGE_PARTICIPANT_STREAMS_ADDED, (participant: any, streams: any[]) => {
-            if (!active || participant.isLocal) return;
+            if (participant.isLocal || stageRef.current !== stage) return;
             setRemoteParticipants(prev => {
-                // Deduplicate: ignore if this participant is already tracked
                 if (prev.some(p => p.id === participant.id)) return prev;
                 return [...prev, { id: participant.id, streams }];
             });
         });
 
         stage.on(StageEvents.STAGE_PARTICIPANT_STREAMS_REMOVED, (participant: any) => {
-            if (!active) return;
+            if (stageRef.current !== stage) return;
             setRemoteParticipants(prev => prev.filter(p => p.id !== participant.id));
         });
 
-        stage.join().catch(err => console.error("IVS Join Error:", err));
+        stage.join().catch(err => console.error('IVS join error:', err));
 
         return () => {
-            active = false;
             stage.leave();
+            if (stageRef.current === stage) stageRef.current = null;
             setRemoteParticipants([]);
         };
-    }, [matchData, localStreams]);
+    }, [matchData?.participantToken]); // only re-run when the token changes
 
-    // Step 3: Dynamic Layout Calculation
     const totalPeople = 1 + remoteParticipants.length;
-    let gridClass = "grid-cols-1"; 
-    
-    if (matchData && totalPeople === 2) gridClass = "grid-cols-1";
-    else if (matchData && (totalPeople === 3 || totalPeople === 4)) gridClass = "grid-cols-2 sm:grid-rows-2";
-    else if (matchData && totalPeople > 4) gridClass = "grid-cols-3 sm:grid-rows-2"; 
+    let gridClass = 'grid-cols-1';
+    if (matchData && (totalPeople === 3 || totalPeople === 4)) gridClass = 'grid-cols-2 sm:grid-rows-2';
+    else if (matchData && totalPeople > 4) gridClass = 'grid-cols-3 sm:grid-rows-2';
 
     return (
         <div className={`w-full h-full max-h-[85vh] grid gap-4 relative ${gridClass}`}>
-            
-            {/* If there is no match, render a glassmorphism "Waiting" overlay on top of the local camera */}
             {!matchData && localStreams.length > 0 && (
                 <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/40 backdrop-blur-sm rounded-xl">
                     <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
                     <h2 className="text-2xl font-bold text-white drop-shadow-md">
-                        {isConnected ? "Searching for a room..." : "Connecting to server..."}
+                        {isConnected ? 'Searching for a room...' : 'Connecting to server...'}
                     </h2>
                 </div>
             )}
 
-            {/* Local Camera (Always rendered if available) */}
             {localStreams.length > 0 && (
                 <VideoPlayer streams={localStreams} isLocal={true} />
             )}
 
-            {/* Remote Cameras (Only rendered if matchData exists and people joined) */}
             {matchData && remoteParticipants.map(participant => (
                 <VideoPlayer key={participant.id} streams={participant.streams} isLocal={false} />
             ))}
