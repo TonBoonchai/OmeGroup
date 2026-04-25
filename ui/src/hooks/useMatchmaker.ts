@@ -43,8 +43,9 @@ export function useMatchmaker(username: string) {
                 setChatMessages([]);
             } else if (data.type === 'chat') {
                 // Skip echo of our own messages — we add them locally on send
-                if (data.sender && data.sender !== username) {
-                    setChatMessages(prev => [...prev, { sender: data.sender, text: data.text }]);
+                const sender = data.sender || 'Peer';
+                if (sender !== username) {
+                    setChatMessages(prev => [...prev, { sender, text: data.text }]);
                 }
             }
         }

@@ -116,6 +116,7 @@ pub async fn handle_send_message(
             let blob = Blob::new(chat_payload.to_string().into_bytes());
 
             for peer_id in peers {
+                if peer_id == connection_id { continue; }
                 let _ = apigw_client.post_to_connection()
                     .connection_id(&peer_id)
                     .data(blob.clone())

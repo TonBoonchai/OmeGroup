@@ -64,8 +64,9 @@ export const VideoGrid: React.FC<VideoGridProps> = ({ matchData, isConnected }) 
 
     // Step 2: Hydrate AWS IVS ONLY when matchData is provided
     useEffect(() => {
-        // If we swiped and matchData is null, do not execute the IVS join logic
         if (!matchData || !matchData.participantToken || localStreams.length === 0) return;
+
+        let active = true; // guard against stale events after cleanup
 
         const strategy = {
             stageStreamsToPublish: () => localStreams,
@@ -77,21 +78,25 @@ export const VideoGrid: React.FC<VideoGridProps> = ({ matchData, isConnected }) 
         stageRef.current = stage;
 
         stage.on(StageEvents.STAGE_PARTICIPANT_STREAMS_ADDED, (participant: any, streams: any[]) => {
-            if (participant.isLocal) return;
-            setRemoteParticipants(prev => [...prev, { id: participant.id, streams }]);
+            if (!active || participant.isLocal) return;
+            setRemoteParticipants(prev => {
+                // Deduplicate: ignore if this participant is already tracked
+                if (prev.some(p => p.id === participant.id)) return prev;
+                return [...prev, { id: participant.id, streams }];
+            });
         });
 
         stage.on(StageEvents.STAGE_PARTICIPANT_STREAMS_REMOVED, (participant: any) => {
+            if (!active) return;
             setRemoteParticipants(prev => prev.filter(p => p.id !== participant.id));
         });
 
         stage.join().catch(err => console.error("IVS Join Error:", err));
 
-        // CRITICAL CLEANUP: When matchData becomes null (user swiped), leave the stage immediately
-        // but the localStreams state is completely untouched!
         return () => {
+            active = false;
             stage.leave();
-            setRemoteParticipants([]); 
+            setRemoteParticipants([]);
         };
     }, [matchData, localStreams]);
 
