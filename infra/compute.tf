@@ -60,7 +60,7 @@ resource "aws_lambda_function" "chat_backend" {
 
   vpc_config {
     subnet_ids         = [aws_subnet.private.id, aws_subnet.private_2.id]
-    security_group_ids = [aws_security_group.redis_sg.id]
+    security_group_ids = [aws_security_group.lambda_sg.id]
   }
 
 environment {
@@ -147,7 +147,7 @@ resource "aws_lambda_function" "chat_cron" {
   
   vpc_config {
     subnet_ids         = [aws_subnet.private.id, aws_subnet.private_2.id]
-    security_group_ids = [aws_security_group.redis_sg.id]
+    security_group_ids = [aws_security_group.lambda_sg.id]
   }
 
   environment {
@@ -196,7 +196,7 @@ resource "null_resource" "deploy_lambdas" {
     command     = <<-EOT
       set -e
       echo "==> Building Rust Lambdas..."
-      cargo lambda build --release --arm64
+      cargo lambda build --release
 
       echo "==> Packaging backend..."
       cd target/lambda/backend
