@@ -60,7 +60,7 @@ resource "aws_lambda_function" "chat_backend" {
 
   vpc_config {
     subnet_ids         = [aws_subnet.private.id, aws_subnet.private_2.id]
-    security_group_ids = [aws_security_group.redis_sg.id]
+    security_group_ids = [aws_security_group.lambda_sg.id]
   }
 
 environment {
@@ -147,7 +147,7 @@ resource "aws_lambda_function" "chat_cron" {
   
   vpc_config {
     subnet_ids         = [aws_subnet.private.id, aws_subnet.private_2.id]
-    security_group_ids = [aws_security_group.redis_sg.id]
+    security_group_ids = [aws_security_group.lambda_sg.id]
   }
 
   environment {
@@ -176,4 +176,49 @@ resource "aws_lambda_permission" "allow_eventbridge" {
   function_name = aws_lambda_function.chat_cron.function_name
   principal     = "events.amazonaws.com"
   source_arn    = aws_cloudwatch_event_rule.every_minute.arn
+}
+
+# Build Rust binaries and upload to Lambda after infra is ready
+resource "null_resource" "deploy_lambdas" {
+  triggers = {
+    # Re-deploy whenever region changes or source code changes
+    region      = var.aws_region
+    src_hash    = sha1(join("", [for f in fileset("${path.module}/../backend/src", "**/*.rs") : filesha1("${path.module}/../backend/src/${f}")]))
+  }
+
+  depends_on = [
+    aws_lambda_function.chat_backend,
+    aws_lambda_function.chat_cron,
+  ]
+
+  provisioner "local-exec" {
+    working_dir = "${path.module}/../backend"
+    command     = <<-EOT
+      set -e
+      echo "==> Building Rust Lambdas..."
+      cargo lambda build --release
+
+      echo "==> Packaging backend..."
+      cd target/lambda/backend
+      zip -j bootstrap.zip bootstrap
+      aws lambda update-function-code \
+        --function-name ${aws_lambda_function.chat_backend.function_name} \
+        --zip-file fileb://bootstrap.zip \
+        --region ${var.aws_region} \
+        --output text
+      cd -
+
+      echo "==> Packaging cron..."
+      cd target/lambda/cron
+      zip -j bootstrap.zip bootstrap
+      aws lambda update-function-code \
+        --function-name ${aws_lambda_function.chat_cron.function_name} \
+        --zip-file fileb://bootstrap.zip \
+        --region ${var.aws_region} \
+        --output text
+      cd -
+
+      echo "==> Lambdas deployed."
+    EOT
+  }
 }

@@ -79,16 +79,29 @@ resource "aws_route_table_association" "private_assoc_2" {
   route_table_id = aws_route_table.private_rt.id
 }
 
+resource "aws_security_group" "lambda_sg" {
+  name        = "lambda-security-group"
+  description = "Security group for Lambda functions"
+  vpc_id      = aws_vpc.main.id
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
 resource "aws_security_group" "redis_sg" {
   name        = "redis-security-group"
-  description = "Allow Redis traffic from within the VPC"
+  description = "Allow Redis traffic from Lambda"
   vpc_id      = aws_vpc.main.id
 
   ingress {
-    from_port   = 6379
-    to_port     = 6379
-    protocol    = "tcp"
-    cidr_blocks = [aws_vpc.main.cidr_block]
+    from_port       = 6379
+    to_port         = 6379
+    protocol        = "tcp"
+    security_groups = [aws_security_group.lambda_sg.id]
   }
 
   egress {

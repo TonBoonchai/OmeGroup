@@ -11,7 +11,7 @@ const VideoPlayer = ({ streams, isLocal, portrait }: { streams: any[], isLocal: 
             streams.forEach(s => mediaStream.addTrack(s.mediaStreamTrack));
             videoRef.current.srcObject = mediaStream;
         }
-    }, [streams]);
+    }, [streams.length]); // re-attach when track count changes (audio+video merge)
 
     return (
         <div
@@ -99,13 +99,19 @@ export const VideoGrid: React.FC<VideoGridProps> = ({ matchData, isConnected }) 
 
         stage.on(StageEvents.STAGE_PARTICIPANT_STREAMS_ADDED, (participant: any, streams: any[]) => {
             if (participant.isLocal || stageRef.current !== stage) return;
-            // Skip if any track matches our own local camera/mic tracks
             const isOwnStream = streams.some(s =>
                 localTrackIdsRef.current.has(s.mediaStreamTrack?.id)
             );
             if (isOwnStream) return;
-            // Upsert into Map — same ID can never produce two entries
-            setRemoteParticipants(prev => new Map(prev).set(participant.id, streams));
+            // Merge streams — IVS fires this event separately for audio and video tracks
+            setRemoteParticipants(prev => {
+                const next = new Map(prev);
+                const existing = next.get(participant.id) ?? [];
+                const existingIds = new Set(existing.map((s: any) => s.mediaStreamTrack?.id));
+                const merged = [...existing, ...streams.filter(s => !existingIds.has(s.mediaStreamTrack?.id))];
+                next.set(participant.id, merged);
+                return next;
+            });
         });
 
         stage.on(StageEvents.STAGE_PARTICIPANT_STREAMS_REMOVED, (participant: any) => {

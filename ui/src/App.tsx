@@ -1,13 +1,53 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useMatchmaker } from "./hooks/useMatchmaker";
 import { VideoGrid } from "./components/VideoGrid";
 import { Send, LogOut } from "lucide-react";
 
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 640);
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 640);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
+  return isMobile;
+}
+
+function useIsPortrait() {
+  const [isPortrait, setIsPortrait] = useState(window.innerHeight > window.innerWidth);
+  useEffect(() => {
+    const handler = () => setIsPortrait(window.innerHeight > window.innerWidth);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
+  return isPortrait;
+}
+
+function RotateOverlay() {
+  return (
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 9999,
+      backgroundColor: "#1a1a1a",
+      display: "flex", flexDirection: "column",
+      alignItems: "center", justifyContent: "center", gap: 24,
+    }}>
+      <div style={{ fontSize: 64 }}>🔄</div>
+      <OmeLogo size="mobile" />
+      <p style={{
+        color: "white", fontSize: 18, fontWeight: 600,
+        textAlign: "center", margin: 0, padding: "0 32px",
+      }}>
+        Please rotate your device to landscape mode
+      </p>
+    </div>
+  );
+}
+
 const ORANGE = "#E05E36";
 const GREEN = "#42A77E";
 
-function OmeLogo({ size = "lg" }: { size?: "lg" | "sm" }) {
-  const fontSize = size === "lg" ? 96 : 32;
+function OmeLogo({ size = "lg" }: { size?: "lg" | "sm" | "mobile" }) {
+  const fontSize = size === "lg" ? 96 : size === "mobile" ? 48 : 32;
   return (
     <span
       style={{ fontSize, fontWeight: 800, letterSpacing: -1, lineHeight: 1 }}
@@ -41,6 +81,7 @@ function Circle({
 
 function UsernameGate({ onJoin }: { onJoin: (name: string) => void }) {
   const [input, setInput] = useState("");
+  const isMobile = useIsMobile();
 
   const handleSubmit = (e: React.SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -49,12 +90,11 @@ function UsernameGate({ onJoin }: { onJoin: (name: string) => void }) {
   };
 
   return (
-    /* Full-screen orange frame */
     <div
       style={{
-        height: "100vh",
+        minHeight: "100vh",
         backgroundColor: "#1a1a1a",
-        padding: 16,
+        padding: isMobile ? 8 : 16,
         boxSizing: "border-box",
         display: "flex",
       }}
@@ -63,49 +103,46 @@ function UsernameGate({ onJoin }: { onJoin: (name: string) => void }) {
         style={{
           flex: 1,
           backgroundColor: ORANGE,
-          borderRadius: 20,
-          padding: 10,
+          borderRadius: isMobile ? 12 : 20,
+          padding: isMobile ? 6 : 10,
           display: "flex",
         }}
       >
-        {/* White inner, centered content */}
         <div
           style={{
             flex: 1,
             backgroundColor: "white",
-            borderRadius: 12,
+            borderRadius: isMobile ? 8 : 12,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             position: "relative",
             overflow: "hidden",
+            padding: "0 16px",
           }}
         >
-          {/* Decorative circles top-right */}
-          <Circle
-            size={80}
-            style={{ position: "absolute", top: 32, right: 40 }}
-          />
-          <Circle
-            size={56}
-            style={{ position: "absolute", top: 120, right: 64 }}
-          />
+          {!isMobile && (
+            <>
+              <Circle size={80} style={{ position: "absolute", top: 32, right: 40 }} />
+              <Circle size={56} style={{ position: "absolute", top: 120, right: 64 }} />
+            </>
+          )}
 
-          {/* Form card */}
           <div
             style={{
               display: "flex",
               flexDirection: "column",
               alignItems: "center",
-              gap: 32,
-              width: 480,
+              gap: isMobile ? 20 : 32,
+              width: "100%",
+              maxWidth: 480,
             }}
           >
-            <OmeLogo size="lg" />
+            <OmeLogo size={isMobile ? "mobile" : "lg"} />
             <p
               style={{
                 color: "#6b7280",
-                fontSize: 22,
+                fontSize: isMobile ? 16 : 22,
                 margin: 0,
                 fontWeight: 600,
               }}
@@ -131,8 +168,8 @@ function UsernameGate({ onJoin }: { onJoin: (name: string) => void }) {
                   width: "100%",
                   border: `2px solid ${ORANGE}`,
                   borderRadius: 8,
-                  padding: "12px 16px",
-                  fontSize: 25,
+                  padding: isMobile ? "10px 14px" : "12px 16px",
+                  fontSize: isMobile ? 18 : 25,
                   outline: "none",
                   color: "#1f2937",
                   boxSizing: "border-box",
@@ -147,8 +184,8 @@ function UsernameGate({ onJoin }: { onJoin: (name: string) => void }) {
                   color: "white",
                   border: "none",
                   borderRadius: 8,
-                  padding: "12px 0",
-                  fontSize: 15,
+                  padding: "14px 0",
+                  fontSize: 16,
                   fontWeight: 700,
                   cursor: "pointer",
                   opacity: input.trim() ? 1 : 0.4,
@@ -174,6 +211,12 @@ function ChatApp({
   const { matchData, swipe, isConnected, isTaken, chatMessages, sendMessage } =
     useMatchmaker(username);
   const [chatInput, setChatInput] = useState("");
+  const isMobile = useIsMobile();
+  const chatBottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [chatMessages]);
 
   if (isTaken) {
     return (
@@ -242,107 +285,98 @@ function ChatApp({
   };
 
   return (
-    /* Full-screen dark bg */
     <div
       style={{
-        height: "100vh",
+        minHeight: "100vh",
         backgroundColor: "#1a1a1a",
-        padding: 16,
+        padding: isMobile ? 8 : 16,
         boxSizing: "border-box",
         display: "flex",
       }}
     >
-      {/* Orange frame fills the space */}
       <div
         style={{
           flex: 1,
           backgroundColor: ORANGE,
-          borderRadius: 20,
-          padding: 10,
+          borderRadius: isMobile ? 12 : 20,
+          padding: isMobile ? 6 : 10,
           display: "flex",
         }}
       >
-        {/* White inner */}
         <div
           style={{
             flex: 1,
             backgroundColor: "white",
-            borderRadius: 12,
+            borderRadius: isMobile ? 8 : 12,
             display: "flex",
             flexDirection: "column",
             overflow: "hidden",
           }}
         >
-          {/* Main row: video + chat */}
-          <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
+          {/* Main area: video + chat — row on desktop, column on mobile */}
+          <div style={{ flex: 1, display: "flex", flexDirection: isMobile ? "column" : "row", overflow: "hidden" }}>
+
             {/* Video area */}
-            <div style={{ flex: 1, padding: 12, overflow: "hidden" }}>
+            <div style={{ flex: 1, padding: isMobile ? 8 : 12, overflow: "hidden", minHeight: 0 }}>
               <VideoGrid matchData={matchData} isConnected={isConnected} />
             </div>
 
-            {/* Chat sidebar */}
+            {/* Chat — sidebar on desktop, compact strip on mobile */}
             <div
               style={{
-                width: 260,
-                borderLeft: `2px solid ${ORANGE}`,
+                width: isMobile ? "100%" : 260,
+                height: isMobile ? 200 : "auto",
+                borderLeft: isMobile ? "none" : `2px solid ${ORANGE}`,
+                borderTop: isMobile ? `2px solid ${ORANGE}` : "none",
                 display: "flex",
                 flexDirection: "column",
+                flexShrink: 0,
+                minHeight: 0,
               }}
             >
-              {/* Header */}
-              <div
-                style={{
-                  padding: "14px 16px",
-                  fontWeight: 700,
-                  color: ORANGE,
-                  borderBottom: `2px solid ${ORANGE}`,
-                  fontSize: 15,
-                }}
-              >
-                Room Chat
-              </div>
-
               {/* Messages */}
               <div
                 style={{
                   flex: 1,
                   overflowY: "auto",
-                  padding: 12,
+                  WebkitOverflowScrolling: "touch",
+                  padding: isMobile ? "6px 10px" : 12,
                   display: "flex",
                   flexDirection: "column",
-                  gap: 8,
+                  gap: 6,
+                  minHeight: 0,
                 }}
               >
+                {chatMessages.length === 0 && (
+                  <div style={{ color: "#9ca3af", fontSize: 12, textAlign: "center", marginTop: 8 }}>
+                    No messages yet
+                  </div>
+                )}
                 {chatMessages.map((msg, idx) => (
                   <div
                     key={idx}
                     style={{
-                      maxWidth: "90%",
-                      alignSelf:
-                        msg.sender === username ? "flex-end" : "flex-start",
-                      backgroundColor:
-                        msg.sender === username ? ORANGE : "#e5e7eb",
+                      maxWidth: "85%",
+                      alignSelf: msg.sender === username ? "flex-end" : "flex-start",
+                      backgroundColor: msg.sender === username ? ORANGE : "#e5e7eb",
                       color: msg.sender === username ? "white" : "#1f2937",
                       borderRadius: 12,
-                      padding: "8px 12px",
-                      fontSize: 13,
+                      padding: "6px 10px",
+                      fontSize: isMobile ? 12 : 13,
                     }}
                   >
-                    <div
-                      style={{ fontSize: 11, opacity: 0.7, marginBottom: 2 }}
-                    >
-                      {msg.sender}
-                    </div>
+                    <div style={{ fontSize: 10, opacity: 0.7, marginBottom: 2 }}>{msg.sender}</div>
                     {msg.text}
                   </div>
                 ))}
+                <div ref={chatBottomRef} />
               </div>
 
-              {/* Input */}
+              {/* Chat input */}
               <form
                 onSubmit={handleSend}
                 style={{
-                  padding: 10,
+                  padding: isMobile ? "6px 8px" : 10,
                   borderTop: `2px solid ${ORANGE}`,
                   display: "flex",
                   gap: 8,
@@ -357,8 +391,8 @@ function ChatApp({
                     flex: 1,
                     backgroundColor: "#f3f4f6",
                     borderRadius: 8,
-                    padding: "8px 12px",
-                    fontSize: 13,
+                    padding: isMobile ? "8px 10px" : "8px 12px",
+                    fontSize: isMobile ? 14 : 13,
                     border: "none",
                     outline: "none",
                     color: "#1f2937",
@@ -387,7 +421,7 @@ function ChatApp({
           <div
             style={{
               borderTop: `2px solid ${ORANGE}`,
-              padding: "12px 20px",
+              padding: isMobile ? "8px 12px" : "12px 20px",
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
@@ -401,9 +435,9 @@ function ChatApp({
                 color: "white",
                 border: "none",
                 borderRadius: 12,
-                padding: "12px 48px",
+                padding: isMobile ? "10px 32px" : "12px 48px",
                 fontWeight: 700,
-                fontSize: 18,
+                fontSize: isMobile ? 16 : 18,
                 cursor: "pointer",
                 opacity: isConnected ? 1 : 0.4,
               }}
@@ -411,8 +445,8 @@ function ChatApp({
               Next
             </button>
 
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <span style={{ fontWeight: 600, color: "#374151", fontSize: 14 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontWeight: 600, color: "#374151", fontSize: isMobile ? 12 : 14 }}>
                 {username}
               </span>
               <button
@@ -423,13 +457,13 @@ function ChatApp({
                   color: "white",
                   border: "none",
                   borderRadius: 10,
-                  padding: "10px 14px",
+                  padding: "8px 12px",
                   cursor: "pointer",
                   display: "flex",
                   alignItems: "center",
                 }}
               >
-                <LogOut size={18} />
+                <LogOut size={16} />
               </button>
             </div>
           </div>
@@ -441,12 +475,14 @@ function ChatApp({
 
 function App() {
   const [username, setUsername] = useState<string | null>(null);
+  const isMobile = useIsMobile();
+  const isPortrait = useIsPortrait();
 
-  if (!username) {
-    return <UsernameGate onJoin={setUsername} />;
-  }
+  if (isMobile && isPortrait) return <RotateOverlay />;
 
-  return <ChatApp username={username} onLeave={() => setUsername(null)} />;
+  return !username
+    ? <UsernameGate onJoin={setUsername} />
+    : <ChatApp username={username} onLeave={() => setUsername(null)} />;
 }
 
 export default App;
