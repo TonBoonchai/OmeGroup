@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Stage, LocalStageStream, StageEvents, SubscribeType } from 'amazon-ivs-web-broadcast';
 import type { MatchPayload } from '../hooks/useMatchmaker';
 
-const VideoPlayer = ({ streams, isLocal }: { streams: any[], isLocal: boolean }) => {
+const VideoPlayer = ({ streams, isLocal, portrait }: { streams: any[], isLocal: boolean, portrait?: boolean }) => {
     const videoRef = useRef<HTMLVideoElement>(null);
 
     useEffect(() => {
@@ -14,7 +14,10 @@ const VideoPlayer = ({ streams, isLocal }: { streams: any[], isLocal: boolean })
     }, [streams]);
 
     return (
-        <div className="relative w-full h-full bg-gray-900 rounded-xl overflow-hidden shadow-lg border border-gray-700">
+        <div
+            className="relative bg-gray-900 rounded-xl overflow-hidden shadow-lg border border-gray-700"
+            style={portrait ? { flex: 1, height: '100%', minWidth: 0 } : { width: '100%', height: '100%' }}
+        >
             <video
                 ref={videoRef}
                 autoPlay
@@ -75,7 +78,7 @@ export const VideoGrid: React.FC<VideoGridProps> = ({ matchData, isConnected }) 
                 stageRef.current.leave();
                 stageRef.current = null;
             }
-            setRemoteParticipants([]);
+            setRemoteParticipants(new Map());
             return;
         }
 
@@ -124,9 +127,22 @@ export const VideoGrid: React.FC<VideoGridProps> = ({ matchData, isConnected }) 
     }, [matchData?.participantToken]); // only re-run when the token changes
 
     const totalPeople = 1 + remoteParticipants.size;
+    const isTwoPersonRoom = matchData && totalPeople === 2;
+
     let gridClass = 'grid-cols-1';
     if (matchData && (totalPeople === 3 || totalPeople === 4)) gridClass = 'grid-cols-2 sm:grid-rows-2';
     else if (matchData && totalPeople > 4) gridClass = 'grid-cols-3 sm:grid-rows-2';
+
+    if (isTwoPersonRoom) {
+        return (
+            <div className="w-full h-full max-h-[85vh] flex flex-row items-center justify-center gap-4 relative">
+                {localStreams.length > 0 && <VideoPlayer streams={localStreams} isLocal={true} portrait />}
+                {Array.from(remoteParticipants.entries()).map(([id, streams]) => (
+                    <VideoPlayer key={id} streams={streams} isLocal={false} portrait />
+                ))}
+            </div>
+        );
+    }
 
     return (
         <div className={`w-full h-full max-h-[85vh] grid gap-4 relative ${gridClass}`}>
