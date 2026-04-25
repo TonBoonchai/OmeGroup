@@ -38,11 +38,13 @@ interface VideoGridProps {
 
 export const VideoGrid: React.FC<VideoGridProps> = ({ matchData, isConnected }) => {
     const [localStreams, setLocalStreams] = useState<LocalStageStream[]>([]);
-    const [remoteParticipants, setRemoteParticipants] = useState<{ id: string; streams: any[] }[]>([]);
+    // Map keyed by participant ID — structurally prevents duplicates
+    const [remoteParticipants, setRemoteParticipants] = useState<Map<string, any[]>>(new Map());
 
     // Use refs so the IVS effect never needs to re-run due to stream/stage changes
     const stageRef = useRef<Stage | null>(null);
     const localStreamsRef = useRef<LocalStageStream[]>([]);
+    const localTrackIdsRef = useRef<Set<string>>(new Set());
 
     // Step 1: Acquire camera/mic once — store in both state (for rendering) and ref (for IVS strategy)
     useEffect(() => {
@@ -54,6 +56,7 @@ export const VideoGrid: React.FC<VideoGridProps> = ({ matchData, isConnected }) 
                 activeTracks = mediaStream.getTracks();
                 const ivsStreams = activeTracks.map(t => new LocalStageStream(t));
                 localStreamsRef.current = ivsStreams;
+                localTrackIdsRef.current = new Set(activeTracks.map(t => t.id));
                 setLocalStreams(ivsStreams);
             } catch (err) {
                 console.error('Camera/mic access failed', err);
@@ -81,7 +84,7 @@ export const VideoGrid: React.FC<VideoGridProps> = ({ matchData, isConnected }) 
             stageRef.current.leave();
             stageRef.current = null;
         }
-        setRemoteParticipants([]);
+        setRemoteParticipants(new Map());
 
         const stage = new Stage(matchData.participantToken, {
             stageStreamsToPublish: () => localStreamsRef.current,
@@ -93,15 +96,22 @@ export const VideoGrid: React.FC<VideoGridProps> = ({ matchData, isConnected }) 
 
         stage.on(StageEvents.STAGE_PARTICIPANT_STREAMS_ADDED, (participant: any, streams: any[]) => {
             if (participant.isLocal || stageRef.current !== stage) return;
-            setRemoteParticipants(prev => {
-                if (prev.some(p => p.id === participant.id)) return prev;
-                return [...prev, { id: participant.id, streams }];
-            });
+            // Skip if any track matches our own local camera/mic tracks
+            const isOwnStream = streams.some(s =>
+                localTrackIdsRef.current.has(s.mediaStreamTrack?.id)
+            );
+            if (isOwnStream) return;
+            // Upsert into Map — same ID can never produce two entries
+            setRemoteParticipants(prev => new Map(prev).set(participant.id, streams));
         });
 
         stage.on(StageEvents.STAGE_PARTICIPANT_STREAMS_REMOVED, (participant: any) => {
             if (stageRef.current !== stage) return;
-            setRemoteParticipants(prev => prev.filter(p => p.id !== participant.id));
+            setRemoteParticipants(prev => {
+                const next = new Map(prev);
+                next.delete(participant.id);
+                return next;
+            });
         });
 
         stage.join().catch(err => console.error('IVS join error:', err));
@@ -109,11 +119,11 @@ export const VideoGrid: React.FC<VideoGridProps> = ({ matchData, isConnected }) 
         return () => {
             stage.leave();
             if (stageRef.current === stage) stageRef.current = null;
-            setRemoteParticipants([]);
+            setRemoteParticipants(new Map());
         };
     }, [matchData?.participantToken]); // only re-run when the token changes
 
-    const totalPeople = 1 + remoteParticipants.length;
+    const totalPeople = 1 + remoteParticipants.size;
     let gridClass = 'grid-cols-1';
     if (matchData && (totalPeople === 3 || totalPeople === 4)) gridClass = 'grid-cols-2 sm:grid-rows-2';
     else if (matchData && totalPeople > 4) gridClass = 'grid-cols-3 sm:grid-rows-2';
@@ -133,8 +143,8 @@ export const VideoGrid: React.FC<VideoGridProps> = ({ matchData, isConnected }) 
                 <VideoPlayer streams={localStreams} isLocal={true} />
             )}
 
-            {matchData && remoteParticipants.map(participant => (
-                <VideoPlayer key={participant.id} streams={participant.streams} isLocal={false} />
+            {matchData && Array.from(remoteParticipants.entries()).map(([id, streams]) => (
+                <VideoPlayer key={id} streams={streams} isLocal={false} />
             ))}
         </div>
     );
