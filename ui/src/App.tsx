@@ -92,7 +92,7 @@ function UsernameGate({ onJoin }: { onJoin: (name: string) => void }) {
   return (
     <div
       style={{
-        height: "100vh",
+        minHeight: "100vh",
         backgroundColor: "#1a1a1a",
         padding: isMobile ? 8 : 16,
         boxSizing: "border-box",
@@ -287,7 +287,7 @@ function ChatApp({
   return (
     <div
       style={{
-        height: "100vh",
+        minHeight: "100vh",
         backgroundColor: "#1a1a1a",
         padding: isMobile ? 8 : 16,
         boxSizing: "border-box",
