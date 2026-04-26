@@ -24,6 +24,11 @@ export function useMatchmaker(username: string) {
 
     const { sendJsonMessage, lastJsonMessage, readyState } = useWebSocket(wsUrl, {
         shouldReconnect: () => false,
+        heartbeat: {
+            message: JSON.stringify({ action: 'ping' }),
+            interval: 5 * 60 * 1000, // every 5 minutes — API Gateway closes at 10 min idle
+            timeout: 10000,
+        },
         onOpen: () => {
             everConnected.current = true;
             console.log('Connected as', username);
