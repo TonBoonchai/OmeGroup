@@ -42,16 +42,16 @@ export function ChatApp({ username, onLeave }: { username: string; onLeave: () =
   };
 
   return (
-    <div style={{ minHeight: "100vh", backgroundColor: "#1a1a1a", padding: isMobile ? 8 : 16, boxSizing: "border-box", display: "flex" }}>
-      <div style={{ flex: 1, backgroundColor: ORANGE, borderRadius: isMobile ? 12 : 20, padding: isMobile ? 6 : 10, display: "flex" }}>
-        <div style={{ flex: 1, backgroundColor: "white", borderRadius: isMobile ? 8 : 12, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+    <div style={{ height: "100vh", backgroundColor: "#1a1a1a", padding: isMobile ? 8 : 16, boxSizing: "border-box", display: "flex" }}>
+      <div style={{ flex: 1, backgroundColor: ORANGE, borderRadius: isMobile ? 12 : 20, padding: isMobile ? 6 : 10, display: "flex", minHeight: 0 }}>
+        <div style={{ flex: 1, backgroundColor: "white", borderRadius: isMobile ? 8 : 12, display: "flex", flexDirection: "column", overflow: "hidden", minHeight: 0 }}>
           
           <div style={{ flex: 1, display: "flex", flexDirection: isMobile ? "column" : "row", overflow: "hidden" }}>
             <div style={{ flex: 1, padding: isMobile ? 8 : 12, overflow: "hidden", minHeight: 0 }}>
               <VideoGrid matchData={matchData} isConnected={isConnected} />
             </div>
 
-            <div style={{ width: isMobile ? "100%" : 260, height: isMobile ? 200 : "auto", borderLeft: isMobile ? "none" : `2px solid ${ORANGE}`, borderTop: isMobile ? `2px solid ${ORANGE}` : "none", display: "flex", flexDirection: "column", flexShrink: 0, minHeight: 0 }}>
+            <div style={{ width: isMobile ? "100%" : 260, flexBasis: isMobile ? 200 : "auto", flexShrink: 0, borderLeft: isMobile ? "none" : `2px solid ${ORANGE}`, borderTop: isMobile ? `2px solid ${ORANGE}` : "none", display: "flex", flexDirection: "column", minHeight: 0, overflow: "hidden" }}>
               <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch", padding: isMobile ? "6px 10px" : 12, display: "flex", flexDirection: "column", gap: 6, minHeight: 0 }}>
                 {chatMessages.length === 0 && (
                   <div style={{ color: "#9ca3af", fontSize: 12, textAlign: "center", marginTop: 8 }}>No messages yet</div>
