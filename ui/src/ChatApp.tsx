@@ -75,7 +75,7 @@ export function ChatApp({ username, onLeave }: { username: string; onLeave: () =
           </div>
 
           <div style={{ borderTop: `2px solid ${ORANGE}`, padding: isMobile ? "8px 12px" : "12px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <button onClick={swipe} disabled={!isConnected} style={{ backgroundColor: GREEN, color: "white", border: "none", borderRadius: 12, padding: isMobile ? "10px 32px" : "12px 48px", fontWeight: 700, fontSize: isMobile ? 16 : 18, cursor: "pointer", opacity: isConnected ? 1 : 0.4 }}>
+            <button onClick={swipe} disabled={!isConnected || !matchData} style={{ backgroundColor: GREEN, color: "white", border: "none", borderRadius: 12, padding: isMobile ? "10px 32px" : "12px 48px", fontWeight: 700, fontSize: isMobile ? 16 : 18, cursor: "pointer", opacity: (isConnected && matchData) ? 1 : 0.4 }}>
               Next
             </button>
 

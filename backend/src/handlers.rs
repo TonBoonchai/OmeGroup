@@ -118,10 +118,16 @@ pub async fn handle_send_message(
 
             for peer_id in peers {
                 if peer_id == connection_id { continue; }
-                let _ = apigw_client.post_to_connection()
+                let result = apigw_client.post_to_connection()
                     .connection_id(&peer_id)
                     .data(blob.clone())
                     .send().await;
+                if result.is_err() {
+                    // Peer disconnected without cleanup — remove them from the room now
+                    let _: () = con.srem(format!("room:{}", arn), &peer_id).await.unwrap_or(());
+                    let _: i32 = con.zincr("active_rooms", &arn, -1).await.unwrap_or(0);
+                    let _: () = con.del(format!("user:{}", peer_id)).await.unwrap_or(());
+                }
             }
         }
     }
