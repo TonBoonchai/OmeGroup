@@ -1,4 +1,3 @@
-import React from "react";
 import { OmeLogo } from "./shared/Logo";
 
 export function RotateOverlay() {

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { UsernameGate } from "./components/UsernameGate";
 import { ChatApp } from "./ChatApp";
 import { RotateOverlay } from "./components/RotateOverlay";
