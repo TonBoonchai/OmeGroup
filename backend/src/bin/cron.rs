@@ -49,53 +49,49 @@ async fn run_matchmaking(
     con: &mut redis::aio::Connection,
     ivs_client: &IvsClient,
     apigw_client: &ApiGwClient,
-) -> Result<(), Error> {
-    loop {
-        // Check for rooms that already have people and have space
-        let available_rooms: Vec<String> = redis::cmd("ZRANGEBYSCORE")
-            .arg("active_rooms").arg(1).arg(5).arg("LIMIT").arg(0).arg(1)
-            .query_async(con).await?;
+) -> Result<bool, Error> {
+    let waiting: Option<String> = con.lpop("waiting_queue", None).await?;
+    let id1 = match waiting {
+        Some(id) => id,
+        None => return Ok(false), // queue empty, stop loop early
+    };
 
-        if let Some(room) = available_rooms.first() {
-            // Room exists with space — pop one user and join them
-            let waiting: Option<String> = con.lpop("waiting_queue", None).await?;
-            if let Some(connection_id) = waiting {
-                let _: i32 = con.zincr("active_rooms", room, 1).await?;
-                match_one(con, ivs_client, apigw_client, &connection_id, room).await?;
-            } else {
-                break; // no users waiting
-            }
-        } else {
-            // No rooms with space — need 2 users to start a new room
-            let user1: Option<String> = con.lpop("waiting_queue", None).await?;
-            let user2: Option<String> = con.lpop("waiting_queue", None).await?;
+    let user_key = format!("user:{}", id1);
+    let last_room: Option<String> = con.hget(&user_key, "last_room").await.unwrap_or(None);
 
-            match (user1, user2) {
-                (Some(id1), Some(id2)) => {
-                    // Create one room for both users
-                    let stage = ivs_client.create_stage().name("dynamic-room").send().await?;
-                    let new_arn = stage.stage().unwrap().arn().to_string();
-                    // Start score at 2 since we're adding 2 users at once
-                    let _: () = con.zadd("active_rooms", &new_arn, 2).await?;
+    let available_rooms: Vec<String> = redis::cmd("ZRANGEBYSCORE")
+        .arg("active_rooms").arg(1).arg(5).query_async(con).await?;
 
-                    match_one(con, ivs_client, apigw_client, &id1, &new_arn).await?;
-                    match_one(con, ivs_client, apigw_client, &id2, &new_arn).await?;
-                }
-                (Some(id1), None) => {
-                    // Only one user waiting and no rooms — put them back and stop
-                    let _: () = redis::cmd("LPUSH")
-                        .arg("waiting_queue")
-                        .arg(&id1)
-                        .query_async(con)
-                        .await?;
-                    break;
-                }
-                _ => break,
-            }
+    // Filter out the room they just came from
+    let mut chosen_room = None;
+    for room in available_rooms {
+        if Some(&room) != last_room.as_ref() {
+            chosen_room = Some(room);
+            break;
         }
     }
 
-    Ok(())
+    if let Some(room) = chosen_room {
+        let _: i32 = con.zincr("active_rooms", &room, 1).await?;
+        match_one(con, ivs_client, apigw_client, &id1, &room).await?;
+        return Ok(true);
+    }
+
+    // No valid existing rooms. Look for a second waiting user to create a new one.
+    let waiting2: Option<String> = con.lpop("waiting_queue", None).await?;
+    if let Some(id2) = waiting2 {
+        let stage = ivs_client.create_stage().name("dynamic-room").send().await?;
+        let new_arn = stage.stage().unwrap().arn().to_string();
+        let _: () = con.zadd("active_rooms", &new_arn, 2).await?;
+
+        match_one(con, ivs_client, apigw_client, &id1, &new_arn).await?;
+        match_one(con, ivs_client, apigw_client, &id2, &new_arn).await?;
+        return Ok(true);
+    } else {
+        // Only 1 person waiting with nowhere to go. Put them back in queue.
+        let _: () = redis::cmd("LPUSH").arg("waiting_queue").arg(&id1).query_async(con).await?;
+        return Ok(false); 
+    }
 }
 
 async fn cron_handler(
@@ -107,7 +103,11 @@ async fn cron_handler(
     let mut con = redis_client.get_async_connection().await?;
 
     for _ in 0..12 {
-        run_matchmaking(&mut con, ivs_client, apigw_client).await?;
+        let mut matched_any = true;
+        // Keep matching continuously until queue is completely settled
+        while matched_any {
+            matched_any = run_matchmaking(&mut con, ivs_client, apigw_client).await.unwrap_or(false);
+        }
         tokio::time::sleep(Duration::from_secs(5)).await;
     }
 

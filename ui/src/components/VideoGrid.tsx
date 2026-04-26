@@ -11,7 +11,7 @@ const VideoPlayer = ({ streams, isLocal, portrait }: { streams: any[], isLocal: 
             streams.forEach(s => mediaStream.addTrack(s.mediaStreamTrack));
             videoRef.current.srcObject = mediaStream;
         }
-    }, [streams.length]); // re-attach when track count changes (audio+video merge)
+    }, [streams.length]);
 
     return (
         <div
@@ -41,15 +41,12 @@ interface VideoGridProps {
 
 export const VideoGrid: React.FC<VideoGridProps> = ({ matchData, isConnected }) => {
     const [localStreams, setLocalStreams] = useState<LocalStageStream[]>([]);
-    // Map keyed by participant ID — structurally prevents duplicates
     const [remoteParticipants, setRemoteParticipants] = useState<Map<string, any[]>>(new Map());
 
-    // Use refs so the IVS effect never needs to re-run due to stream/stage changes
     const stageRef = useRef<Stage | null>(null);
     const localStreamsRef = useRef<LocalStageStream[]>([]);
     const localTrackIdsRef = useRef<Set<string>>(new Set());
 
-    // Step 1: Acquire camera/mic once — store in both state (for rendering) and ref (for IVS strategy)
     useEffect(() => {
         let activeTracks: MediaStreamTrack[] = [];
 
@@ -70,10 +67,8 @@ export const VideoGrid: React.FC<VideoGridProps> = ({ matchData, isConnected }) 
         return () => { activeTracks.forEach(t => t.stop()); };
     }, []);
 
-    // Step 2: Join/leave IVS stage — only depends on matchData (token), NOT localStreams state
     useEffect(() => {
         if (!matchData?.participantToken) {
-            // No match — leave any existing stage
             if (stageRef.current) {
                 stageRef.current.leave();
                 stageRef.current = null;
@@ -82,7 +77,6 @@ export const VideoGrid: React.FC<VideoGridProps> = ({ matchData, isConnected }) 
             return;
         }
 
-        // Always leave the previous stage before joining a new one
         if (stageRef.current) {
             stageRef.current.leave();
             stageRef.current = null;
@@ -103,7 +97,7 @@ export const VideoGrid: React.FC<VideoGridProps> = ({ matchData, isConnected }) 
                 localTrackIdsRef.current.has(s.mediaStreamTrack?.id)
             );
             if (isOwnStream) return;
-            // Merge streams — IVS fires this event separately for audio and video tracks
+            
             setRemoteParticipants(prev => {
                 const next = new Map(prev);
                 const existing = next.get(participant.id) ?? [];
@@ -123,6 +117,16 @@ export const VideoGrid: React.FC<VideoGridProps> = ({ matchData, isConnected }) 
             });
         });
 
+        // BUG FIX: Ensure we completely unmount the participant if they abruptly drop
+        stage.on(StageEvents.STAGE_PARTICIPANT_LEFT, (participant: any) => {
+            if (stageRef.current !== stage) return;
+            setRemoteParticipants(prev => {
+                const next = new Map(prev);
+                next.delete(participant.id);
+                return next;
+            });
+        });
+
         stage.join().catch(err => console.error('IVS join error:', err));
 
         return () => {
@@ -130,7 +134,7 @@ export const VideoGrid: React.FC<VideoGridProps> = ({ matchData, isConnected }) 
             if (stageRef.current === stage) stageRef.current = null;
             setRemoteParticipants(new Map());
         };
-    }, [matchData?.participantToken]); // only re-run when the token changes
+    }, [matchData?.participantToken]);
 
     const totalPeople = 1 + remoteParticipants.size;
     const isTwoPersonRoom = matchData && totalPeople === 2;

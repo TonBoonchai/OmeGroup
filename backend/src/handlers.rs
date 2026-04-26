@@ -6,13 +6,11 @@ use redis::AsyncCommands;
 use serde_json::Value;
 use tracing::info;
 
-// Returns true if username was already taken (connection should be rejected)
 pub async fn handle_connect(
     con: &mut redis::aio::Connection,
     connection_id: &str,
     username: &str,
 ) -> Result<bool, Error> {
-    // Try to set username key only if it doesn't exist (NX = only if Not eXists)
     let claimed: bool = redis::cmd("SET")
         .arg(format!("username:{}", username))
         .arg(connection_id)
@@ -25,10 +23,7 @@ pub async fn handle_connect(
         return Ok(true);
     }
 
-    // Map connection ID -> username for lookup on disconnect/message
     let _: () = con.hset(format!("conn:{}", connection_id), "username", username).await?;
-
-    // Add to matchmaking queue
     let _: () = con.rpush("waiting_queue", connection_id).await?;
     info!("User {} queued for matchmaking.", username);
 
@@ -43,8 +38,6 @@ pub async fn handle_disconnect(
 ) -> Result<(), Error> {
     let username: Option<String> = con.hget(format!("conn:{}", connection_id), "username").await?;
 
-    // On real disconnect: free username so others can claim it and delete conn mapping
-    // On swipe: keep both so the user stays logged in with the same name
     if !is_swipe {
         if let Some(name) = &username {
             let _: () = con.del(format!("username:{}", name)).await?;
@@ -52,28 +45,35 @@ pub async fn handle_disconnect(
         let _: () = con.del(format!("conn:{}", connection_id)).await?;
     }
 
-    // Clean up room/stage state regardless
     let user_key = format!("user:{}", connection_id);
     let stage_arn: Option<String> = con.hget(&user_key, "stage_arn").await?;
 
-    if let Some(arn) = stage_arn {
+    if let Some(arn) = &stage_arn {
         let room_key = format!("room:{}", arn);
         let _: () = con.srem(&room_key, connection_id).await?;
-        let current_capacity: i32 = con.zincr("active_rooms", &arn, -1).await?;
+        let current_capacity: i32 = con.zincr("active_rooms", arn, -1).await?;
 
         if current_capacity <= 0 {
             info!("Room {} is empty. Destroying IVS Stage.", arn);
-            let _: () = con.zrem("active_rooms", &arn).await?;
+            let _: () = con.zrem("active_rooms", arn).await?;
             let _: () = con.del(&room_key).await?;
-            let _ = ivs_client.delete_stage().arn(&arn).send().await;
+            let _ = ivs_client.delete_stage().arn(arn).send().await;
         }
     }
 
-    let _: () = con.del(&user_key).await?;
-
     if is_swipe {
+        let _: () = con.hdel(&user_key, "stage_arn").await?;
+        if let Some(arn) = stage_arn {
+            // Save the last room so the cron worker knows to skip it
+            let _: () = con.hset(&user_key, "last_room", arn).await?;
+            // Optional: expire memory after a few minutes so they can eventually re-match
+            let _: () = con.expire(&user_key, 120).await?; 
+        }
         let _: () = con.rpush("waiting_queue", connection_id).await?;
         info!("User {:?} swiped and re-queued.", username);
+    } else {
+        // Full cleanup if it's a true disconnect
+        let _: () = con.del(&user_key).await?; 
     }
 
     Ok(())
@@ -97,11 +97,8 @@ pub async fn handle_send_message(
         let body: Value = serde_json::from_str(body_str).unwrap_or_default();
         let text = body["text"].as_str().unwrap_or("");
 
-        if text.is_empty() {
-            return Ok(());
-        }
+        if text.is_empty() { return Ok(()); }
 
-        // Look up sender's display name
         let username: String = con
             .hget(format!("conn:{}", connection_id), "username")
             .await
@@ -111,7 +108,6 @@ pub async fn handle_send_message(
 
         if let Some(arn) = stage_arn {
             let peers: Vec<String> = con.smembers(format!("room:{}", arn)).await?;
-
             let chat_payload = serde_json::json!({
                 "type": "chat",
                 "sender": username,
