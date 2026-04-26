@@ -26,8 +26,8 @@ export function useMatchmaker(username: string) {
         shouldReconnect: () => false,
         heartbeat: {
             message: JSON.stringify({ action: 'ping' }),
-            interval: 5 * 60 * 1000, // every 5 minutes — API Gateway closes at 10 min idle
-            timeout: 10000,
+            interval: 4 * 60 * 1000,  // ping every 4 min
+            timeout: 9 * 60 * 1000,   // close only if silent for 9 min (just under API GW 10 min limit)
         },
         onOpen: () => {
             everConnected.current = true;
