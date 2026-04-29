@@ -1,7 +1,9 @@
 
 
 # OmeGroup
-**Serverless Random Group Video Chat Platform**
+**Random Group Video Chat Platform**
+
+![banner](img/2.png)
 
 ## 👥 Project Members
 * **Boonchai Jinaporn** | 6632110421
